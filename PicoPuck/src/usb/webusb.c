@@ -18,7 +18,15 @@
 #include "usb/webusb.h"
 #include "config/picopuck_config.h"
 #include "puck/slots.h"
+#include "puck/relay.h"
+#include "puck/personality.h"
+#include "usb/usb_tx.h"
 #include "bt/bt_control.h"
+
+// From bt_valve.c / bt_host.c — declared here to avoid pulling BTstack's HID
+// headers (which clash with TinyUSB's) into this TinyUSB translation unit.
+extern volatile uint16_t g_valve_writes;
+uint8_t bt_report_count(int slot);
 
 #include <string.h>
 #include "tusb.h"
@@ -55,7 +63,7 @@ static void send_frame(const uint8_t *frame, uint16_t len)
 
 static void send_status(void)
 {
-	uint8_t f[2 + 17 + PP_NSLOT * SLOT_REC_LEN + 6];
+	uint8_t f[2 + 17 + PP_NSLOT * SLOT_REC_LEN + 11 + PP_NSLOT * 5];
 	uint8_t *p = f;
 	*p++ = 0xA5;
 	uint8_t *plen = p++;  // payload length, filled below
@@ -104,6 +112,24 @@ static void send_status(void)
 	*p++ = hci_state;
 	*p++ = (uint8_t)(hev & 0xFF);
 	*p++ = (uint8_t)(hev >> 8);
+	// Relay diagnostics: host→controller relays (Steam sending haptics?) and
+	// GATT writes issued to SC2s (did we forward them?).
+	*p++ = (uint8_t)(g_relay_count & 0xFF);
+	*p++ = (uint8_t)(g_relay_count >> 8);
+	*p++ = g_relay_last_id;
+	*p++ = (uint8_t)(g_valve_writes & 0xFF);
+	*p++ = (uint8_t)(g_valve_writes >> 8);
+	// Per-slot feature access: [getN][setN][lastSetCmd] ×4 — shows which slot
+	// interfaces Steam actually polls/pairs.
+	for (int s = 0; s < PP_NSLOT; s++) {
+		uint8_t g = 0, st = 0, lc = 0;
+		puck_slot_io(s, &g, &st, &lc);
+		*p++ = g;
+		*p++ = st;
+		*p++ = lc;
+		*p++ = bt_report_count(s);  // BT input reports received
+		*p++ = usb_tx_count(s);     // reports Steam drained
+	}
 
 	*plen = (uint8_t)(p - start);
 	send_frame(f, (uint16_t)(p - f));
@@ -184,8 +210,13 @@ static void dispatch(const uint8_t *c, uint8_t n)
 		watchdog_reboot(0, 0, 10);
 		break;
 	case 0x0B:
-		if (c[1] == 0x42 && c[2] == 0x4C)
+		if (c[1] == 0x42 && c[2] == 0x4C) {
+			// Disarm the watchdog first so it can't reset the chip back out
+			// of BOOTSEL, then reboot into the UF2 bootloader with both the
+			// mass-storage and PICOBOOT interfaces enabled.
+			watchdog_disable();
 			reset_usb_boot(0, 0);
+		}
 		break;
 	case 0x0C:
 		if (c[1] == 0xDE && c[2] == 0xAD)

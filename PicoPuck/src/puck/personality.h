@@ -30,4 +30,13 @@ void puck_present_raw(int slot, const uint8_t *rep, uint8_t len);
 // Mark a slot connected/disconnected (BT link up/down).
 void puck_set_connected(int slot, bool connected);
 
+// Diagnostics: per-slot feature GET/SET counts + last SET command byte, so the
+// panel can show whether Steam is polling/pairing each slot's interface.
+void puck_slot_io(int slot, uint8_t *get_n, uint8_t *set_n, uint8_t *last_set_cmd);
+
+// Give a slot a synthetic bond record with a UNIQUE serial derived from the
+// controller's BT address, so Steam mounts each connected controller as a
+// distinct device (0xA3 bond read + 0xAE serial read return this identity).
+void puck_set_bond(int slot, const uint8_t addr[6], uint8_t kind);
+
 #endif // PICOPUCK_PERSONALITY_H

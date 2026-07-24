@@ -14,7 +14,16 @@
 
 #include <stdint.h>
 
-// Queue one command (cmd byte + payload) for the controller bound to `slot`.
-void relay_enqueue(int slot, uint8_t cmd, const uint8_t *payload, uint16_t len);
+#include <stdint.h>
+
+// Diagnostics (read by the WebUSB panel): total relays and the last report id.
+extern volatile uint16_t g_relay_count;
+extern volatile uint8_t g_relay_last_id;
+
+// Forward the HID report [report_id][body...] to the controller bound to `slot`
+// (SC2: written verbatim to the Valve report characteristic; generic pad: 0x80
+// rumble mapped to the pad's output). No length byte is re-inserted — pass the
+// exact bytes that should land on the controller after the report-id.
+void relay_enqueue(int slot, uint8_t report_id, const uint8_t *body, uint16_t len);
 
 #endif // PICOPUCK_RELAY_H

@@ -12,6 +12,7 @@
 #include "bt/bt_control.h"
 #include "bt/input_driver.h"
 #include "bt/bt_valve.h"
+#include "bt/bt_hogp.h"
 #include "puck/personality.h"
 #include "puck/triton.h"
 #include "config/picopuck_config.h"
@@ -19,7 +20,6 @@
 #include <stdio.h>
 #include <string.h>
 #include "btstack.h"
-#include "ble/gatt-service/hids_client.h"
 #include "classic/hid_host.h"
 #include "pico/cyw43_arch.h"
 #include "pico/time.h"
@@ -34,7 +34,6 @@
 static btstack_packet_callback_registration_t s_hci_cb;
 static btstack_packet_callback_registration_t s_sm_cb;
 static bool s_ready;
-static uint8_t s_hid_desc_storage[1024];    // BLE hids_client
 static uint8_t s_classic_desc_storage[1024]; // Classic hid_host
 
 // Per-slot connection state.
@@ -67,6 +66,17 @@ static struct {
 } s_connecting;
 
 static uint16_t s_adv_seen;  // diagnostic: raw advertising reports since scan start
+static uint8_t s_bt_rep[PP_NSLOT];  // diagnostic: input reports received from BT per slot
+uint8_t bt_report_count(int slot)
+{
+	return (slot >= 0 && slot < PP_NSLOT) ? s_bt_rep[slot] : 0;
+}
+// Called by the HOGP/Valve clients (other TUs) when an input report arrives.
+void bt_host_note_report(int slot)
+{
+	if (slot >= 0 && slot < PP_NSLOT && s_bt_rep[slot] < 255)
+		s_bt_rep[slot]++;
+}
 static uint16_t s_hci_events;  // diagnostic: total HCI events seen (run-loop alive?)
 static uint8_t s_last_state;   // diagnostic: last BTSTACK_EVENT_STATE value
 static bool s_bt_init_ok;      // btstack_cyw43_init returned success
@@ -100,14 +110,6 @@ static int slot_by_handle(hci_con_handle_t h)
 			return i;
 	return -1;
 }
-static int slot_by_cid(uint16_t cid)
-{
-	for (int i = 0; i < PP_NSLOT; i++)
-		if (g_conn[i].active && !g_conn[i].is_classic &&
-		    g_conn[i].hids_cid == cid)
-			return i;
-	return -1;
-}
 static int slot_by_hid_cid(uint16_t cid)
 {
 	for (int i = 0; i < PP_NSLOT; i++)
@@ -129,6 +131,12 @@ static void slot_release(int slot)
 		return;
 	memset(&g_conn[slot], 0, sizeof(g_conn[slot]));
 	puck_set_connected(slot, false);
+}
+
+// The input driver bound to a slot (used by the HOGP client in another TU).
+const input_driver_t *bt_slot_driver(int slot)
+{
+	return (slot >= 0 && slot < PP_NSLOT) ? g_conn[slot].drv : NULL;
 }
 
 static bool any_free_slot(void)
@@ -195,9 +203,8 @@ static void scan_ensure(void)
 }
 
 // ---- forward decl ----------------------------------------------------------
-static void hids_handler(uint8_t type, uint16_t channel, uint8_t *packet,
-			 uint16_t size);
-static void start_hids(int slot);
+static void resolve_name(int slot);
+static void route_connection(int slot);
 
 // ---- HCI events ------------------------------------------------------------
 static void handle_advertising_report(uint8_t *packet)
@@ -267,10 +274,10 @@ static void handle_advertising_report(uint8_t *packet)
 	}
 
 	// Connect if this is our pending pair target, or a bonded device coming back
-	// online while a slot is free (auto-reconnect). A driver match needs the
-	// name, so for auto-reconnect wait for a report that carries it.
+	// online while a slot is free (auto-reconnect). The name is resolved over
+	// GATT after connecting, so a nameless reconnect advert is fine here.
 	bool want = (s_pair_pending && memcmp(addr, s_pair_addr, 6) == 0);
-	if (!want && !s_connecting.busy && name[0] && any_free_slot() &&
+	if (!want && !s_connecting.busy && any_free_slot() &&
 	    addr_bonded_le(addr) && !addr_connected(addr))
 		want = true;
 	if (want && !s_connecting.busy) {
@@ -403,6 +410,8 @@ static void packet_handler(uint8_t type, uint16_t channel, uint8_t *packet,
 			printf("[bt] disconnect slot %d\n", slot);
 			if (g_conn[slot].is_valve)
 				valve_disconnected(h);
+			else
+				hogp_disconnected(h);
 			slot_release(slot);
 			scan_ensure();  // resume reconnect scan
 		}
@@ -435,7 +444,7 @@ static void sm_handler(uint8_t type, uint16_t channel, uint8_t *packet,
 			int slot = slot_by_handle(
 				sm_event_pairing_complete_get_handle(packet));
 			if (slot >= 0)
-				start_hids(slot);
+				resolve_name(slot);
 		}
 		break;
 	}
@@ -443,7 +452,7 @@ static void sm_handler(uint8_t type, uint16_t channel, uint8_t *packet,
 		int slot = slot_by_handle(
 			sm_event_reencryption_complete_get_handle(packet));
 		if (slot >= 0)
-			start_hids(slot);
+			resolve_name(slot);
 		break;
 	}
 	default:
@@ -451,82 +460,73 @@ static void sm_handler(uint8_t type, uint16_t channel, uint8_t *packet,
 	}
 }
 
-static void start_hids(int slot)
+// Decide SC2-vs-HOGP from the (now known) name and start the right client.
+static void route_connection(int slot)
 {
 	conn_t *c = &g_conn[slot];
 	if (c->hid_started)
 		return;
 	c->hid_started = true;
+	c->is_valve = (strstr(c->name, "Steam") != NULL);
+	c->drv = input_driver_match(0, 0, c->name, true);
+	puck_set_bond(slot, c->addr, c->drv ? c->drv->kind : 0);
+	puck_set_connected(slot, true);
 
-	// SC2 speaks a proprietary Valve GATT service, not HOGP.
-	if (c->is_valve) {
-		c->drv = input_driver_match(0, 0, c->name, true);  // kind 1 (SC2)
-		puck_set_connected(slot, true);
-		valve_start(slot, c->handle);
-		return;
-	}
-
-	uint8_t r = hids_client_connect(c->handle, hids_handler,
-					HID_PROTOCOL_MODE_REPORT, &c->hids_cid);
-	if (r != ERROR_CODE_SUCCESS) {
-		printf("[bt] hids_client_connect failed %d\n", r);
-		c->hid_started = false;
-	}
+	if (c->is_valve)
+		valve_start(slot, c->handle);       // SC2 proprietary Valve GATT
+	else
+		hogp_start(slot, c->handle);        // standard HID-over-GATT (Xbox, …)
 }
 
-// ---- HID-over-GATT client events -------------------------------------------
-static void hids_handler(uint8_t type, uint16_t channel, uint8_t *packet,
-			 uint16_t size)
+// GAP Device Name read completion — controllers (Xbox especially) often omit the
+// name from the advertisement, and reconnect adverts always do, so read it over
+// GATT before routing. Falls through to routing on any result.
+static void name_read_handler(uint8_t type, uint16_t channel, uint8_t *packet,
+			      uint16_t size)
 {
 	(void)channel;
 	(void)size;
-	if (type != HCI_EVENT_PACKET ||
-	    hci_event_packet_get_type(packet) != HCI_EVENT_GATTSERVICE_META)
+	if (type != HCI_EVENT_PACKET)
 		return;
-
-	switch (hci_event_gattservice_meta_get_subevent_code(packet)) {
-	case GATTSERVICE_SUBEVENT_HID_SERVICE_CONNECTED: {
-		uint16_t cid = gattservice_subevent_hid_service_connected_get_hids_cid(packet);
-		uint8_t status = gattservice_subevent_hid_service_connected_get_status(packet);
-		int slot = slot_by_cid(cid);
+	uint8_t ev = hci_event_packet_get_type(packet);
+	if (ev == GATT_EVENT_CHARACTERISTIC_VALUE_QUERY_RESULT) {
+		hci_con_handle_t h =
+			gatt_event_characteristic_value_query_result_get_handle(packet);
+		int slot = slot_by_handle(h);
 		if (slot < 0)
-			break;
-		conn_t *c = &g_conn[slot];
-		if (status != ERROR_CODE_SUCCESS) {
-			printf("[bt] HID connect failed slot %d status 0x%02X\n", slot,
-			       status);
-			gap_disconnect(c->handle);
-			break;
-		}
-		c->drv = input_driver_match(0, 0, c->name, c->is_ble);
-		if (!c->drv) {
-			printf("[bt] no driver for '%s' — dropping\n", c->name);
-			gap_disconnect(c->handle);
-			break;
-		}
-		printf("[bt] slot %d driver '%s' ready\n", slot, c->drv->name);
-		puck_set_connected(slot, true);
-		hids_client_enable_notifications(cid);
-		break;
+			return;
+		uint16_t vlen =
+			gatt_event_characteristic_value_query_result_get_value_length(packet);
+		const uint8_t *val =
+			gatt_event_characteristic_value_query_result_get_value(packet);
+		uint8_t n = vlen < sizeof(g_conn[slot].name) - 1
+				    ? (uint8_t)vlen
+				    : sizeof(g_conn[slot].name) - 1;
+		memcpy(g_conn[slot].name, val, n);
+		g_conn[slot].name[n] = 0;
+	} else if (ev == GATT_EVENT_QUERY_COMPLETE) {
+		int slot = slot_by_handle(
+			gatt_event_query_complete_get_handle(packet));
+		if (slot >= 0)
+			route_connection(slot);
 	}
-	case GATTSERVICE_SUBEVENT_HID_REPORT: {
-		uint16_t cid = gattservice_subevent_hid_report_get_hids_cid(packet);
-		int slot = slot_by_cid(cid);
-		if (slot < 0 || !g_conn[slot].drv || !g_conn[slot].drv->decode)
-			break;
-		// hids_client delivers [report_id][body...]; drivers want body-only.
-		const uint8_t *rep = gattservice_subevent_hid_report_get_report(packet);
-		uint16_t rlen = gattservice_subevent_hid_report_get_report_len(packet);
-		if (rlen < 1)
-			break;
-		if (g_conn[slot].drv->decode(rep[0], rep + 1, (uint16_t)(rlen - 1),
-					     &g_in[slot]))
-			puck_present_synth(slot);
-		break;
+}
+
+static void resolve_name(int slot)
+{
+	conn_t *c = &g_conn[slot];
+	if (c->hid_started)
+		return;
+	// If the advertisement already gave us a usable name, route immediately;
+	// otherwise read the GAP Device Name (0x2A00) characteristic first.
+	if (c->name[0]) {
+		route_connection(slot);
+		return;
 	}
-	default:
-		break;
-	}
+	uint8_t r = gatt_client_read_value_of_characteristics_by_uuid16(
+		name_read_handler, c->handle, 0x0001, 0xFFFF, 0x2A00);
+	if (r != ERROR_CODE_SUCCESS)
+		route_connection(slot);  // fall back: route with whatever we have
 }
 
 // ---- Classic HID host ------------------------------------------------------
@@ -572,6 +572,7 @@ static void classic_handler(uint8_t type, uint16_t channel, uint8_t *packet,
 			break;
 		}
 		printf("[bt] Classic slot %d driver '%s'\n", slot, c->drv->name);
+		puck_set_bond(slot, c->addr, c->drv->kind);
 		puck_set_connected(slot, true);
 		break;
 	}
@@ -583,6 +584,8 @@ static void classic_handler(uint8_t type, uint16_t channel, uint8_t *packet,
 		uint16_t rlen = hid_subevent_report_get_report_len(packet);
 		if (rlen < 1)
 			break;
+		if (s_bt_rep[slot] < 255)
+			s_bt_rep[slot]++;
 		// Classic HID interrupt reports carry the report-id as byte 0.
 		if (g_conn[slot].drv->decode(r[0], r + 1, (uint16_t)(rlen - 1),
 					     &g_in[slot]))
@@ -619,7 +622,6 @@ bool bt_host_init(void)
 	sm_set_authentication_requirements(SM_AUTHREQ_SECURE_CONNECTION |
 					   SM_AUTHREQ_BONDING);
 	gatt_client_init();
-	hids_client_init(s_hid_desc_storage, sizeof(s_hid_desc_storage));
 
 	// Classic HID host (DS4/DS5/etc). Discoverable + connectable so Sony pads
 	// can initiate the connection inbound.
@@ -682,9 +684,7 @@ void bt_host_task(void)
 							 c->drv->rumble_report_id,
 							 buf, n);
 			else
-				hids_client_send_write_report(
-					c->hids_cid, c->drv->rumble_report_id,
-					HID_REPORT_TYPE_OUTPUT, buf, n);
+				hogp_send_output(i, buf, n);  // BLE HOGP rumble
 			c->rum_last_ms = t;
 			c->rum_pending = false;
 		}

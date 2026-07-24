@@ -24,6 +24,11 @@ typedef struct {
 } tx_ring_t;
 
 static tx_ring_t s_ring[PP_NSLOT];
+static uint8_t s_sent[PP_NSLOT];  // diagnostic: reports Steam actually drained
+uint8_t usb_tx_count(int slot)
+{
+	return (slot >= 0 && slot < PP_NSLOT) ? s_sent[slot] : 0;
+}
 
 bool usb_tx_hid(uint8_t inst, uint8_t report_id, const uint8_t *body, uint16_t len)
 {
@@ -61,6 +66,8 @@ void usb_tx_pump(void)
 		if (tud_hid_n_report(inst, m->report_id, m->body, m->len)) {
 			r->tail = (uint8_t)((r->tail + 1) % TX_RING_DEPTH);
 			r->count--;
+			if (s_sent[inst] < 255)
+				s_sent[inst]++;
 		}
 		// If the send failed, leave it queued and retry next pump.
 	}

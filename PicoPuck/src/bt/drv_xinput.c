@@ -61,23 +61,27 @@ static bool xi_decode(uint8_t rid, const uint8_t *d, uint16_t len,
 	uint8_t b2 = (len > 14) ? d[14] : 0;
 	uint8_t b3 = (len > 15) ? d[15] : 0;
 
+	// Real Xbox One S / Series Bluetooth HID button layout — NOT contiguous.
+	// Byte 13: A=b0 B=b1 X=b3 Y=b4 LB=b6 RB=b7 (b2/b5 unused).
+	// Byte 14: View=b2 Menu=b3 Guide=b4 LS=b5 RS=b6.
+	// Byte 15 (Series 1914): Share=b0.
 	uint32_t b = triton_hat_bits(d[12]);
 	if (b1 & 0x01) b |= TB_A;
 	if (b1 & 0x02) b |= TB_B;
-	if (b1 & 0x04) b |= TB_X;
-	if (b1 & 0x08) b |= TB_Y;
-	if (b1 & 0x10) b |= TB_LB;
-	if (b1 & 0x20) b |= TB_RB;
-	if (b1 & 0x40) b |= TB_VIEW;
-	if (b1 & 0x80) b |= TB_MENU;
+	if (b1 & 0x08) b |= TB_X;
+	if (b1 & 0x10) b |= TB_Y;
+	if (b1 & 0x40) b |= TB_LB;
+	if (b1 & 0x80) b |= TB_RB;
 	if (len > 14) {
-		if (b2 & 0x01) b |= TB_STEAM;  // fw 5.x: guide in-band
-		if (b2 & 0x02) b |= TB_L3;
-		if (b2 & 0x04) b |= TB_R3;
+		if (b2 & 0x04) b |= TB_VIEW;   // View / Select (⧉)
+		if (b2 & 0x08) b |= TB_MENU;   // Menu / Start (☰)
+		if (b2 & 0x10) b |= TB_STEAM;  // Xbox / Guide
+		if (b2 & 0x20) b |= TB_L3;     // Left stick click
+		if (b2 & 0x40) b |= TB_R3;     // Right stick click
 	} else {
-		b |= io->buttons & TB_STEAM;  // 14-byte: guide latched from report 0x02
+		b |= io->buttons & TB_STEAM;  // 14-byte variant: guide on report 0x02
 	}
-	if (b3 & 0x01) b |= TB_QAM;  // Series share → QAM
+	if (b3 & 0x01) b |= TB_QAM;  // Series share → QAM (…)
 	if (lt >= 1000) b |= TB_L2;
 	if (rt >= 1000) b |= TB_R2;
 

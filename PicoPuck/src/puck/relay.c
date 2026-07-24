@@ -7,16 +7,23 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 #include "puck/relay.h"
 
-__attribute__((weak)) void bt_relay(int slot, uint8_t cmd, const uint8_t *payload,
-				    uint16_t len)
+// Diagnostics: how many host→controller relays we've seen, and the last report
+// id. Lets the panel confirm Steam is actually sending haptics/rumble.
+volatile uint16_t g_relay_count;
+volatile uint8_t g_relay_last_id;
+
+__attribute__((weak)) void bt_relay(int slot, uint8_t report_id,
+				    const uint8_t *body, uint16_t len)
 {
 	(void)slot;
-	(void)cmd;
-	(void)payload;
+	(void)report_id;
+	(void)body;
 	(void)len;
 }
 
-void relay_enqueue(int slot, uint8_t cmd, const uint8_t *payload, uint16_t len)
+void relay_enqueue(int slot, uint8_t report_id, const uint8_t *body, uint16_t len)
 {
-	bt_relay(slot, cmd, payload, len);
+	g_relay_count++;
+	g_relay_last_id = report_id;
+	bt_relay(slot, report_id, body, len);
 }

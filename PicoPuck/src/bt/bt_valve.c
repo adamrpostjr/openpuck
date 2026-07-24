@@ -42,6 +42,9 @@ typedef enum {
 	V_READY,
 } valve_state_t;
 
+#define VALVE_WQ 8       // pending host→controller writes
+#define VALVE_WMAX 62    // max report bytes per write
+
 typedef struct {
 	valve_state_t state;
 	int slot;
@@ -53,9 +56,18 @@ typedef struct {
 	gatt_client_notification_t notify;
 	uint32_t last_keepalive_ms;
 	bool imu_enabled;
+
+	// Relayed feature/output reports awaiting a free GATT slot (one write in
+	// flight at a time). Drop-oldest when full so a stall can't wedge input.
+	uint8_t wq[VALVE_WQ][VALVE_WMAX];
+	uint8_t wq_len[VALVE_WQ];
+	uint8_t wq_head, wq_tail, wq_count;
 } valve_t;
 
 static valve_t s_valve[PP_NSLOT];
+
+// Diagnostic: GATT feature writes actually issued to SC2 controllers.
+volatile uint16_t g_valve_writes;
 
 static uint32_t now_ms(void)
 {
@@ -219,6 +231,18 @@ void valve_periodic(void)
 		if (!gatt_client_is_ready(v->handle))
 			continue;  // one GATT op at a time
 
+		// Relayed host writes (haptics/rumble/config) take priority for latency.
+		if (v->wq_count) {
+			uint8_t *rep = v->wq[v->wq_tail];
+			uint8_t rl = v->wq_len[v->wq_tail];
+			v->wq_tail = (uint8_t)((v->wq_tail + 1) % VALVE_WQ);
+			v->wq_count--;
+			gatt_client_write_value_of_characteristic(
+				write_cb, v->handle, v->report_value_handle, rl, rep);
+			g_valve_writes++;
+			continue;
+		}
+
 		// Enable IMU once — but only when Steam isn't configuring it itself
 		// (its own 0x87 writes are relayed through; don't fight them).
 		if (!v->imu_enabled && !puck_steam_active()) {
@@ -238,22 +262,26 @@ void valve_periodic(void)
 	}
 }
 
-void valve_feature_write(int slot, uint8_t cmd, const uint8_t *payload, uint16_t len)
+// Queue the HID report [report_id][body] verbatim for the SC2's report
+// characteristic (drop-oldest if the queue is full). Drained in valve_periodic.
+void valve_feature_write(int slot, uint8_t report_id, const uint8_t *body, uint16_t len)
 {
 	if (slot < 0 || slot >= PP_NSLOT)
 		return;
 	valve_t *v = &s_valve[slot];
 	if (v->state != V_READY || v->report_value_handle == 0)
 		return;
-	if (!gatt_client_is_ready(v->handle))
-		return;  // busy → drop (Steam re-sends); keeps it simple and non-blocking
-	if (len > 60)
-		len = 60;
-	uint8_t buf[64];
-	buf[0] = cmd;
-	buf[1] = (uint8_t)len;
-	memcpy(buf + 2, payload, len);
-	gatt_client_write_value_of_characteristic(write_cb, v->handle,
-						  v->report_value_handle,
-						  (uint16_t)(len + 2), buf);
+	if (len > VALVE_WMAX - 1)
+		len = VALVE_WMAX - 1;
+
+	if (v->wq_count == VALVE_WQ) {
+		v->wq_tail = (uint8_t)((v->wq_tail + 1) % VALVE_WQ);
+		v->wq_count--;
+	}
+	uint8_t *dst = v->wq[v->wq_head];
+	dst[0] = report_id;
+	memcpy(dst + 1, body, len);
+	v->wq_len[v->wq_head] = (uint8_t)(len + 1);
+	v->wq_head = (uint8_t)((v->wq_head + 1) % VALVE_WQ);
+	v->wq_count++;
 }

@@ -1152,12 +1152,28 @@ function applyPicoPuckStatus(p){
   // Diagnostics tail after the slot records: [advSeen lo][hi][flags].
   const dg=17+nSlot*26;
   let diag="";
-  if(p.length>=dg+6){
+  if(p.length>=dg+11){
     const adv=p[dg]|(p[dg+1]<<8), fl=p[dg+2], hs=p[dg+3], hev=p[dg+4]|(p[dg+5]<<8);
+    const relay=p[dg+6]|(p[dg+7]<<8), relayId=p[dg+8], vw=p[dg+9]|(p[dg+10]<<8);
     const HS=["off","initialising","working","halting","sleeping"];
     diag = ` · ${adv} adv · ${(fl&1)?"scan on":"scan off"}`
       + ` · hci=${HS[hs]||hs}(evts ${hev})`
+      + ` · relays ${relay} (last 0x${relayId.toString(16)}) · gattW ${vw}`
       + `${(fl&8)?"":" · INIT FAIL"}${(fl&16)?"":" · no power-on"}${(fl&2)?"":" · NOT READY"}${(fl&4)?" · connecting":""}`;
+    // Per-slot: [getN][setN][lastSetCmd][btRep][usbTx] ×nSlot.
+    const io=dg+11;
+    if(p.length>=io+nSlot*5){
+      let parts=[];
+      for(let s=0;s<nSlot;s++){
+        const b=io+s*5, g=p[b], st=p[b+1], lc=p[b+2], btr=p[b+3], utx=p[b+4];
+        if(g||st||btr||utx) parts.push(`i${s} g${g}/s${st}/0x${lc.toString(16)} bt${btr} tx${utx}`);
+      }
+      if(parts.length) diag += " · Steam[" + parts.join(", ") + "]";
+    }
+  } else if(p.length>=dg+6){
+    const adv=p[dg]|(p[dg+1]<<8), fl=p[dg+2], hs=p[dg+3], hev=p[dg+4]|(p[dg+5]<<8);
+    const HS=["off","initialising","working","halting","sleeping"];
+    diag = ` · ${adv} adv · ${(fl&1)?"scan on":"scan off"} · hci=${HS[hs]||hs}(evts ${hev})`;
   } else if(p.length>=dg+3){
     const adv=p[dg]|(p[dg+1]<<8), fl=p[dg+2];
     diag = ` · ${adv} adv · ${(fl&1)?"scan on":"scan off"}${(fl&2)?"":" · NOT READY"}`;

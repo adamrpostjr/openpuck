@@ -15,6 +15,7 @@
 #include "config/picopuck_config.h"
 
 #include <string.h>
+#include <stdio.h>
 #include "tusb.h"
 #include "pico/time.h"
 
@@ -24,6 +25,20 @@ static bool s_pairing;
 static uint8_t s_conn_state[PP_NSLOT];  // last emitted 0x79 state (0 none/1 disc/2 conn)
 static uint32_t s_last_7b_ms[PP_NSLOT];
 static uint32_t s_last_43_ms[PP_NSLOT];
+
+// Diagnostics: per-slot feature GET/SET counts (does Steam poll this interface?)
+// and the last SET command byte (does Steam pair it via 0xA2 / send haptics?).
+static uint8_t s_get_n[PP_NSLOT];
+static uint8_t s_set_n[PP_NSLOT];
+static uint8_t s_last_set_cmd[PP_NSLOT];
+void puck_slot_io(int slot, uint8_t *g, uint8_t *s, uint8_t *last)
+{
+	if (slot < 0 || slot >= PP_NSLOT)
+		return;
+	if (g) *g = s_get_n[slot];
+	if (s) *s = s_set_n[slot];
+	if (last) *last = s_last_set_cmd[slot];
+}
 
 static inline uint32_t now_ms(void)
 {
@@ -54,21 +69,48 @@ bool puck_steam_active(void)
 }
 
 static uint8_t s_seq[PP_NSLOT];
+// Per-slot source: 0 none, 1 synth (generic pad — we must stream it), 2 raw (SC2
+// forwards its own continuous stream). s_last_emit_ms drives the synth streamer.
+static uint8_t s_src[PP_NSLOT];
+static uint32_t s_last_emit_ms[PP_NSLOT];
+
+// Continuous 0x45 stream cadence for synth slots (~125 Hz). A real SC2 streams
+// continuously; a HOGP pad only reports on change, so we re-emit its current
+// state at this rate to keep Steam's controller mounted and fed.
+#define SYNTH_STREAM_MS 8u
+
+static void emit_synth(int slot)
+{
+	// Build the 0x45 layout, then present it under BOTH main-input report ids:
+	// 0x45 (legacy fw) and 0x42 (SC2 beta fw ~2026-07, 53-byte body = the same
+	// layout plus 8 trailing zero bytes). Steam's driver parses only the id its
+	// firmware expects and ignores the other, so sending both covers both
+	// firmwares without us having to detect which. Content is identical, so even
+	// a driver that reads both just sees the same state.
+	uint8_t rep[1 + 53];
+	memset(rep, 0, sizeof(rep));
+	uint8_t seq = s_seq[slot]++;
+	uint32_t us = time_us_32();
+	puck_synth45(&g_in[slot], seq, us, rep);  // fills rep[0]=0x45, rep[1..45]
+	usb_tx_hid((uint8_t)slot, 0x45, rep + 1, PUCK45_LEN - 1);  // 45-byte body
+	usb_tx_hid((uint8_t)slot, 0x42, rep + 1, 53);              // 53-byte body
+	slot_note_input(slot, now_ms());
+	s_last_emit_ms[slot] = now_ms();
+}
 
 void puck_present_synth(int slot)
 {
 	if (slot < 0 || slot >= PP_NSLOT)
 		return;
-	uint8_t rep[PUCK45_LEN];
-	puck_synth45(&g_in[slot], s_seq[slot]++, time_us_32(), rep);
-	usb_tx_hid((uint8_t)slot, rep[0], rep + 1, PUCK45_LEN - 1);
-	slot_note_input(slot, now_ms());
+	s_src[slot] = 1;
+	emit_synth(slot);  // immediate on change; the streamer fills idle gaps
 }
 
 void puck_present_raw(int slot, const uint8_t *rep, uint8_t len)
 {
 	if (slot < 0 || slot >= PP_NSLOT || len < 1)
 		return;
+	s_src[slot] = 2;
 	usb_tx_hid((uint8_t)slot, rep[0], rep + 1, (uint16_t)(len - 1));
 	slot_note_input(slot, now_ms());
 }
@@ -78,8 +120,34 @@ void puck_set_connected(int slot, bool connected)
 	if (slot < 0 || slot >= PP_NSLOT)
 		return;
 	g_slot[slot].connected = connected;
-	if (!connected)
+	if (!connected) {
 		g_slot[slot].conn_reply_ms = 0;
+		s_src[slot] = 0;
+		// Drop the synthetic bond so a re-used slot starts clean.
+		g_slot[slot].used = false;
+		memset(g_slot[slot].rec, 0, PP_BOND_REC_LEN);
+	}
+}
+
+void puck_set_bond(int slot, const uint8_t addr[6], uint8_t kind)
+{
+	if (slot < 0 || slot >= PP_NSLOT)
+		return;
+	puck_slot_t *S = &g_slot[slot];
+	memset(S->rec, 0, PP_BOND_REC_LEN);
+	// 8-byte uuid (kind + address) then a 16-byte SC2-style serial. Steam keys
+	// the slot on the serial, so it must be unique per controller and identical
+	// between the 0xA3 (bond) and 0xAE (controller serial) answers.
+	S->rec[0] = kind;
+	memcpy(S->rec + 1, addr, 6);
+	uint32_t h = 2166136261u;
+	for (int i = 0; i < 6; i++)
+		h = (h ^ addr[i]) * 16777619u;
+	char serial[17];
+	snprintf(serial, sizeof serial, "FXA99602%05lX",
+		 (unsigned long)(h & 0xFFFFF));
+	memcpy(S->rec + 8, serial, 16);
+	S->used = true;
 }
 
 // ---- feature / output writes (host → puck/controller) ----------------------
@@ -90,12 +158,19 @@ static void handle_set(int slot, uint8_t rid, hid_report_type_t type,
 		return;
 	puck_slot_t *S = &g_slot[slot];
 
+	if (s_set_n[slot] < 255)
+		s_set_n[slot]++;
+	s_last_set_cmd[slot] =
+		(type == HID_REPORT_TYPE_FEATURE && n >= 1) ? b[0] : rid;
+
 	// OUTPUT reports 0x80-0x89: haptics/actuators. Relay the 0x80-0x86 range to
 	// the bound controller; the rest are config that rides the feature path.
 	if (type == HID_REPORT_TYPE_OUTPUT) {
 		if (rid >= 0x80 && rid <= 0x89)
 			s_steam_alive_ms = now_ms();
-		if (rid >= 0x80 && rid <= 0x86 && n >= 1)
+		// Forward the whole actuator/config output range verbatim (the SC2 is a
+		// real controller; a generic pad's relay only acts on 0x80 rumble).
+		if (rid >= 0x80 && rid <= 0x89 && n >= 1)
 			relay_enqueue(slot, rid, b, n);
 		return;
 	}
@@ -120,8 +195,12 @@ static void handle_set(int slot, uint8_t rid, hid_report_type_t type,
 			 cmd == 0xA2 || cmd == 0xA3 || cmd == 0xAD ||
 			 cmd == 0xB4 || cmd == 0xED || cmd == 0xA4);
 		if (!local_answer) {
-			uint8_t rl = (len <= pln) ? len : (uint8_t)pln;
-			relay_enqueue(slot, cmd, pl, rl);
+			// Forward the whole report verbatim: report id = cmd, body =
+			// everything after it (b[1..]). relay_enqueue's contract is
+			// "send HID report [report_id][body] to the controller", so no
+			// length byte is re-inserted downstream. (For a 0x87 settings
+			// write b[1] is the setting-count byte, which stays in the body.)
+			relay_enqueue(slot, cmd, b + 1, (uint16_t)(n - 1));
 		}
 	}
 
@@ -230,6 +309,8 @@ static uint16_t handle_get(int slot, uint8_t rid, hid_report_type_t type,
 	(void)rid;
 	if (type != HID_REPORT_TYPE_FEATURE || slot < 0 || slot >= PP_NSLOT)
 		return 0;
+	if (s_get_n[slot] < 255)
+		s_get_n[slot]++;
 	puck_slot_t *S = &g_slot[slot];
 	uint16_t n = S->resp_len ? S->resp_len : 63;
 	if (n > reqlen)
@@ -262,6 +343,12 @@ void puck_personality_task(void)
 	uint32_t t = now_ms();
 
 	for (int s = 0; s < PP_NSLOT; s++) {
+		// Keep synth (generic-pad) slots streaming so Steam sees a continuous
+		// controller like a real SC2 does, not just on-change bursts.
+		if (s_src[s] == 1 && g_slot[s].connected &&
+		    (t - s_last_emit_ms[s]) >= SYNTH_STREAM_MS)
+			emit_synth(s);
+
 		bool live = slot_is_live(s, t);
 		uint8_t state = live ? 0x02 : 0x01;
 

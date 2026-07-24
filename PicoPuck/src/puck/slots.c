@@ -22,11 +22,13 @@ void slots_init(void)
 
 bool slot_is_live(int slot, uint32_t now_ms)
 {
+	(void)now_ms;
 	if (slot < 0 || slot >= PP_NSLOT)
 		return false;
-	const puck_slot_t *s = &g_slot[slot];
-	return s->connected && s->conn_reply_ms &&
-	       (now_ms - s->conn_reply_ms < SLOT_LIVE_WINDOW_MS);
+	// The BT stack manages connect/disconnect explicitly, so "live" == the link
+	// is up. (Unlike the nRF puck's RF link, absence of recent input does NOT
+	// mean disconnected — a HOGP pad only reports on change.)
+	return g_slot[slot].connected;
 }
 
 void slot_note_input(int slot, uint32_t now_ms)

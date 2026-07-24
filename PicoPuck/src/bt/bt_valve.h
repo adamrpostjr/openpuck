@@ -16,6 +16,9 @@
 #include <stdbool.h>
 #include "btstack.h"
 
+// Diagnostic (read by the WebUSB panel): GATT feature writes issued to SC2s.
+extern volatile uint16_t g_valve_writes;
+
 // Begin Valve GATT discovery for a freshly-secured SC2 on `slot`.
 void valve_start(int slot, hci_con_handle_t handle);
 
@@ -25,8 +28,8 @@ void valve_disconnected(hci_con_handle_t handle);
 // Periodic: resend the lizard-off keepalive (~2 s) and enable IMU once. Call each loop.
 void valve_periodic(void);
 
-// Relay one host command (cmd + payload) to the SC2's report characteristic as
-// the on-air feature form [cmd][len][payload].
-void valve_feature_write(int slot, uint8_t cmd, const uint8_t *payload, uint16_t len);
+// Forward the HID report [report_id][body] verbatim to the SC2's report
+// characteristic (queued; drained one write at a time).
+void valve_feature_write(int slot, uint8_t report_id, const uint8_t *body, uint16_t len);
 
 #endif // PICOPUCK_BT_VALVE_H

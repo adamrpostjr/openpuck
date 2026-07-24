@@ -25,5 +25,10 @@ const input_driver_t *input_driver_match(uint16_t vid, uint16_t pid,
 		if (d->match && d->match(vid, pid, devname, is_ble))
 			return d;
 	}
+	// Safety net: a BLE HOGP device we still can't name (GATT name read failed)
+	// is almost certainly the gamepad the user paired — the Xbox layout is the
+	// most common. SC2 is routed separately by the host, so it won't reach here.
+	if (is_ble)
+		return &drv_xinput;
 	return NULL;
 }

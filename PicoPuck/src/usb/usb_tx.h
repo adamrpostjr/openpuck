@@ -20,4 +20,8 @@ bool usb_tx_hid(uint8_t inst, uint8_t report_id, const uint8_t *body, uint16_t l
 // Send queued reports for every instance that is ready. Call each loop.
 void usb_tx_pump(void);
 
+// Diagnostic: count of reports Steam has drained from a slot's endpoint
+// (saturating at 255). Nonzero ⇒ Steam is reading that slot's input.
+uint8_t usb_tx_count(int slot);
+
 #endif // PICOPUCK_USB_TX_H

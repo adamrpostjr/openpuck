@@ -49,6 +49,7 @@ target_sources(picopuck PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/bt/bt_control_stub.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/bt/bt_host.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/bt/bt_valve.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/bt/bt_hogp.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/bt/input_driver.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/bt/drv_xinput.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/bt/drv_sc2.c
