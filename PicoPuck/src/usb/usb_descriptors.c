@@ -28,47 +28,52 @@ void webusb_set_connected(bool connected);
 static uint8_t s_mode;
 static const emu_mode_t *s_emu;  // NULL for puck/xinput modes
 static bool s_xinput;            // MODE_XBOX: custom vendor class, not HID
+static uint8_t s_emu_ifaces = 1; // # of emulated HID interfaces (one per controller)
 static tusb_desc_device_t s_dev;
-static uint8_t s_emu_cfg[80];
+static uint8_t s_emu_cfg[220];   // PP_NSLOT HID (32 B each) + config + vendor
 static uint8_t s_vendor_itf;
+
+uint8_t usb_emu_iface_count(void) { return s_emu_ifaces; }
 
 #define MS_OS_20_DESC_LEN 0xB2
 static uint8_t s_msos[MS_OS_20_DESC_LEN];
 
-// Build the emulated-mode config descriptor: HID gamepad (itf 0, IN-only) plus
-// the WebUSB vendor interface (itf 1, bulk IN/OUT). Returns total length.
-static uint16_t build_emu_config(uint8_t *b, const emu_mode_t *emu)
+// Build the emulated-mode config descriptor: `nif` HID gamepad interfaces (one
+// per controller slot, each with an IN + OUT endpoint) followed by the WebUSB
+// vendor interface. Presenting several HID interfaces is what lets more than one
+// connected controller appear to the host at once (each interface = one pad).
+// Returns total length. HID endpoints: IN 0x81+i / OUT 0x01+i; vendor 0x85/0x05.
+static uint16_t build_emu_config(uint8_t *b, const emu_mode_t *emu, uint8_t nif)
 {
 	uint16_t rlen = emu->report_desc_len;
 	uint8_t poll = emu->poll_ms ? emu->poll_ms : 1;
-	// itf0 HID (2 endpoints: IN + OUT) + itf1 vendor (2 endpoints).
-	const uint16_t total = 9 + 9 + 9 + 7 + 7 + 9 + 7 + 7;  // 64
+	if (nif < 1) nif = 1;
+	if (nif > PP_NSLOT) nif = PP_NSLOT;
+	const uint16_t total = 9 + nif * (9 + 9 + 7 + 7) + (9 + 7 + 7);
 	uint8_t *p = b;
 	// configuration
 	*p++ = 9; *p++ = TUSB_DESC_CONFIGURATION;
 	*p++ = (uint8_t)(total & 0xFF); *p++ = (uint8_t)(total >> 8);
-	*p++ = 2; *p++ = 1; *p++ = 0; *p++ = 0x80; *p++ = 250;
-	// HID interface (itf 0) — IN + OUT so rumble / Switch-Pro subcommands ride
-	// the interrupt OUT pipe (hosts like hid-nintendo require the OUT endpoint;
-	// output reports still also work via EP0 SET_REPORT).
-	*p++ = 9; *p++ = TUSB_DESC_INTERFACE; *p++ = 0; *p++ = 0; *p++ = 2;
-	*p++ = TUSB_CLASS_HID; *p++ = 0; *p++ = 0; *p++ = 0;
-	// HID descriptor
-	*p++ = 9; *p++ = HID_DESC_TYPE_HID; *p++ = 0x11; *p++ = 0x01; *p++ = 0;
-	*p++ = 1; *p++ = HID_DESC_TYPE_REPORT;
-	*p++ = (uint8_t)(rlen & 0xFF); *p++ = (uint8_t)(rlen >> 8);
-	// HID IN endpoint
-	*p++ = 7; *p++ = TUSB_DESC_ENDPOINT; *p++ = 0x81; *p++ = 0x03;
-	*p++ = 64; *p++ = 0; *p++ = poll;
-	// HID OUT endpoint
-	*p++ = 7; *p++ = TUSB_DESC_ENDPOINT; *p++ = 0x01; *p++ = 0x03;
-	*p++ = 64; *p++ = 0; *p++ = poll;
-	// vendor interface (itf 1) — WebUSB
-	*p++ = 9; *p++ = TUSB_DESC_INTERFACE; *p++ = 1; *p++ = 0; *p++ = 2;
+	*p++ = (uint8_t)(nif + 1); *p++ = 1; *p++ = 0; *p++ = 0x80; *p++ = 250;
+	for (uint8_t i = 0; i < nif; i++) {
+		// HID interface i — IN + OUT (rumble / Switch-Pro subcommands ride the
+		// interrupt OUT pipe; output reports also work via EP0 SET_REPORT).
+		*p++ = 9; *p++ = TUSB_DESC_INTERFACE; *p++ = i; *p++ = 0; *p++ = 2;
+		*p++ = TUSB_CLASS_HID; *p++ = 0; *p++ = 0; *p++ = 0;
+		*p++ = 9; *p++ = HID_DESC_TYPE_HID; *p++ = 0x11; *p++ = 0x01; *p++ = 0;
+		*p++ = 1; *p++ = HID_DESC_TYPE_REPORT;
+		*p++ = (uint8_t)(rlen & 0xFF); *p++ = (uint8_t)(rlen >> 8);
+		*p++ = 7; *p++ = TUSB_DESC_ENDPOINT; *p++ = (uint8_t)(0x81 + i); *p++ = 0x03;
+		*p++ = 64; *p++ = 0; *p++ = poll;
+		*p++ = 7; *p++ = TUSB_DESC_ENDPOINT; *p++ = (uint8_t)(0x01 + i); *p++ = 0x03;
+		*p++ = 64; *p++ = 0; *p++ = poll;
+	}
+	// vendor interface (last) — WebUSB
+	*p++ = 9; *p++ = TUSB_DESC_INTERFACE; *p++ = nif; *p++ = 0; *p++ = 2;
 	*p++ = TUSB_CLASS_VENDOR_SPECIFIC; *p++ = 0; *p++ = 0; *p++ = 0;
-	*p++ = 7; *p++ = TUSB_DESC_ENDPOINT; *p++ = 0x02; *p++ = 0x02;
+	*p++ = 7; *p++ = TUSB_DESC_ENDPOINT; *p++ = 0x05; *p++ = 0x02;
 	*p++ = 64; *p++ = 0; *p++ = 0;
-	*p++ = 7; *p++ = TUSB_DESC_ENDPOINT; *p++ = 0x82; *p++ = 0x02;
+	*p++ = 7; *p++ = TUSB_DESC_ENDPOINT; *p++ = 0x85; *p++ = 0x02;
 	*p++ = 64; *p++ = 0; *p++ = 0;
 	return total;
 }
@@ -165,8 +170,18 @@ void usb_descriptors_init(void)
 		s_dev.idVendor = s_emu->vid;
 		s_dev.idProduct = s_emu->pid;
 		s_dev.bcdDevice = s_emu->bcd;
-		build_emu_config(s_emu_cfg, s_emu);
-		s_vendor_itf = 1;
+		// One HID interface per paired controller (min 1) so several connected
+		// controllers each appear as their own pad. Bond count is read from the
+		// persisted label table (BT isn't up yet at descriptor-build time). New
+		// pairings made while already in an emulated mode need a replug/reboot to
+		// gain an interface.
+		uint8_t nb = 0;
+		const pp_cfg_t *c = settings();
+		for (int i = 0; i < 4; i++)
+			if (c->bond[i].used) nb++;
+		s_emu_ifaces = nb < 1 ? 1 : (nb > PP_NSLOT ? PP_NSLOT : nb);
+		build_emu_config(s_emu_cfg, s_emu, s_emu_ifaces);
+		s_vendor_itf = s_emu_ifaces;  // vendor is the interface after the HIDs
 	} else {
 		s_dev.idVendor = PP_USB_VID;
 		s_dev.idProduct = PP_USB_PID;

@@ -106,7 +106,7 @@ void puck_present_synth(int slot)
 {
 	if (slot < 0 || slot >= PP_NSLOT)
 		return;
-	chord_check(slot, false);  // generic pad: L2+R2+LB+RB guard
+	chord_note(slot);  // detect + mask the mode-switch chord on this fresh report
 	s_src[slot] = 1;
 	slot_note_input(slot, now_ms());
 	// Only the puck personality emits the SC2 report; in an emulated mode the
@@ -119,7 +119,7 @@ void puck_present_raw(int slot, const uint8_t *rep, uint8_t len)
 {
 	if (slot < 0 || slot >= PP_NSLOT || len < 1)
 		return;
-	chord_check(slot, true);  // SC2: back-paddle guard
+	chord_note(slot);
 	s_src[slot] = 2;
 	slot_note_input(slot, now_ms());
 	if (mode_is_puck(settings_mode()))
@@ -336,7 +336,7 @@ uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id,
 			       uint16_t reqlen)
 {
 	if (!mode_is_puck(settings_mode()))
-		return emu_get_report(report_id, report_type, buffer, reqlen);
+		return emu_get_report(instance, report_id, report_type, buffer, reqlen);
 	return handle_get(instance, report_id, report_type, buffer, reqlen);
 }
 
@@ -345,7 +345,7 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id,
 			   uint16_t bufsize)
 {
 	if (!mode_is_puck(settings_mode())) {
-		emu_set_report(report_id, report_type, buffer, bufsize);
+		emu_set_report(instance, report_id, report_type, buffer, bufsize);
 		return;
 	}
 	handle_set(instance, report_id, report_type, buffer, bufsize);

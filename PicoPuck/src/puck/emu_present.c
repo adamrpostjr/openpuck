@@ -5,6 +5,7 @@
 #include "puck/emu.h"
 #include "puck/slots.h"
 #include "usb/usb_tx.h"
+#include "usb/usb_descriptors.h"
 #include "config/modes.h"
 #include "sys/settings.h"
 
@@ -14,15 +15,9 @@
 
 static uint32_t s_last_ms;
 
-// First connected slot, or 0 (present a neutral controller when nothing is on).
-static int active_slot(void)
-{
-	for (int s = 0; s < PP_NSLOT; s++)
-		if (g_slot[s].connected)
-			return s;
-	return 0;
-}
-
+// Interface i maps 1:1 to controller slot i. Each emulated HID interface streams
+// its slot's g_in (neutral when that slot is disconnected, keeping the interface
+// alive as an idle pad). Report callbacks route the same way.
 void emu_present_task(void)
 {
 	const emu_mode_t *e = emu_mode_for(settings_mode());
@@ -33,26 +28,29 @@ void emu_present_task(void)
 		return;
 	s_last_ms = t;
 
-	uint8_t body[64];
-	uint8_t rid = 0;
-	uint16_t n = e->build(active_slot(), body, &rid);
-	if (n)
-		usb_tx_hid(0, rid, body, n);
+	uint8_t nif = usb_emu_iface_count();
+	for (uint8_t i = 0; i < nif; i++) {
+		uint8_t body[64];
+		uint8_t rid = 0;
+		uint16_t n = e->build(i, body, &rid);
+		if (n)
+			usb_tx_hid(i, rid, body, n);
+	}
 }
 
-uint16_t emu_get_report(uint8_t report_id, uint8_t type, uint8_t *buf,
-			uint16_t reqlen)
+uint16_t emu_get_report(uint8_t instance, uint8_t report_id, uint8_t type,
+			uint8_t *buf, uint16_t reqlen)
 {
 	const emu_mode_t *e = emu_mode_for(settings_mode());
 	if (e && e->get_report)
-		return e->get_report(active_slot(), report_id, type, buf, reqlen);
+		return e->get_report(instance, report_id, type, buf, reqlen);
 	return 0;
 }
 
-void emu_set_report(uint8_t report_id, uint8_t type, const uint8_t *buf,
-		    uint16_t len)
+void emu_set_report(uint8_t instance, uint8_t report_id, uint8_t type,
+		    const uint8_t *buf, uint16_t len)
 {
 	const emu_mode_t *e = emu_mode_for(settings_mode());
 	if (e && e->set_report)
-		e->set_report(active_slot(), report_id, type, buf, len);
+		e->set_report(instance, report_id, type, buf, len);
 }

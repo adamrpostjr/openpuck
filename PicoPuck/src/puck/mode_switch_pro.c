@@ -95,11 +95,17 @@ static uint32_t code_to_jc(uint8_t c, uint32_t fA, uint32_t fB, uint32_t fX,
 	}
 }
 
-// Single controller MAC (one presented interface). OUI 7C:BB:8A like a genuine
-// Pro Controller; the console reads it via subcommand 0x02 to identify the pad.
-static const uint8_t g_jcMac[6] = { 0x7C, 0xBB, 0x8A, 0x00, 0x00, 0x10 };
-static uint8_t g_jcTimer;
-static uint8_t g_reportMode;  // 0 until subcommand 0x03 selects 0x30
+// Per-slot handshake state — each presented Pro Controller runs its own init
+// handshake and needs a distinct MAC (OUI 7C:BB:8A, last byte 0x10+slot) so the
+// console treats them as separate pads.
+static void jc_mac(int slot, uint8_t out[6])
+{
+	static const uint8_t base[5] = { 0x7C, 0xBB, 0x8A, 0x00, 0x00 };
+	memcpy(out, base, 5);
+	out[5] = (uint8_t)(0x10 + slot);
+}
+static uint8_t g_jcTimer[PP_NSLOT];
+static uint8_t g_reportMode[PP_NSLOT];  // 0 until subcommand 0x03 selects 0x30
 
 // ---- HD-rumble amplitude decoder (see OpenPuck for the full protocol notes).
 enum { HDR_AMP_MIN = -256, HDR_AMP_OFF = -256 };
@@ -136,19 +142,16 @@ static void hdr_build_levels(void)
 	}
 	g_hdr_built = true;
 }
-static int16_t g_band_lo[2], g_band_hi[2];  // running amplitudes per motor (0=L,1=R)
-static void hdr_reset(void)
-{
-	g_band_lo[0] = g_band_hi[0] = HDR_AMP_OFF;
-	g_band_lo[1] = g_band_hi[1] = HDR_AMP_OFF;
-}
+// Running amplitudes per slot, per motor (0=L,1=R); packed 5-bit commands are
+// relative, so this must persist between frames — and be independent per pad.
+static int16_t g_band_lo[PP_NSLOT][2], g_band_hi[PP_NSLOT][2];
 static uint8_t hdr_field(uint32_t w, uint8_t shift, uint8_t width)
 {
 	return (uint8_t)((w >> shift) & ((1u << width) - 1u));
 }
-static uint16_t hdr_decode(uint8_t motor, const uint8_t b[4])
+static uint16_t hdr_decode(int slot, uint8_t motor, const uint8_t b[4])
 {
-	int16_t *lo = &g_band_lo[motor], *hi = &g_band_hi[motor];
+	int16_t *lo = &g_band_lo[slot][motor], *hi = &g_band_hi[slot][motor];
 	uint32_t w = (uint32_t)b[0] | ((uint32_t)b[1] << 8) |
 		     ((uint32_t)b[2] << 16) | ((uint32_t)b[3] << 24);
 	uint16_t peak = 0;
@@ -226,16 +229,16 @@ static uint16_t hdr_decode(uint8_t motor, const uint8_t b[4])
 #undef HDR_SAMPLE
 	return peak;
 }
-static uint16_t g_jc_last_lo, g_jc_last_hi;
+static uint16_t g_jc_last_lo[PP_NSLOT], g_jc_last_hi[PP_NSLOT];
 static void jc_rumble(int slot, const uint8_t *p, uint16_t pn)
 {
 	if (pn < 9) return;  // [timer][left x4][right x4]
 	hdr_build_levels();
-	uint16_t lo = hdr_decode(0, p + 1), hi = hdr_decode(1, p + 5);
-	if (lo == g_jc_last_lo && hi == g_jc_last_hi)
+	uint16_t lo = hdr_decode(slot, 0, p + 1), hi = hdr_decode(slot, 1, p + 5);
+	if (lo == g_jc_last_lo[slot] && hi == g_jc_last_hi[slot])
 		return;  // Switch streams rumble every frame; relay only on change
-	g_jc_last_lo = lo;
-	g_jc_last_hi = hi;
+	g_jc_last_lo[slot] = lo;
+	g_jc_last_hi[slot] = hi;
 	puck_rumble(slot, lo, hi);
 }
 
@@ -307,7 +310,7 @@ static void jc_input_prefix(int slot, uint8_t *out)
 	if (b & TB_L5) jc |= code_to_jc(t->back[2], fA, fB, fX, fY);
 	if (b & TB_R5) jc |= code_to_jc(t->back[3], fA, fB, fX, fY);
 	if (qam) jc |= code_to_jc(t->qam, fA, fB, fX, fY);
-	out[0] = g_jcTimer++;
+	out[0] = g_jcTimer[slot]++;
 	uint8_t chg = (g_battery_state[slot] == 1) ? 0x10 : 0x00;
 	out[1] = (uint8_t)((jc_battery_nibble(slot) << 4) | chg);
 	out[2] = (uint8_t)(jc);
@@ -357,22 +360,23 @@ static void jc_build_stick_cal(void)
 	g_stick_cal_built = true;
 }
 
-// User-cal SPI mirror (0x8000-0x80FF), RAM only. 0xFF = blank → factory fallback.
-static uint8_t g_user_cal[0x100];
-static bool g_user_cal_init;
-static void jc_spi_write(uint32_t addr, uint8_t len, const uint8_t *data, uint16_t avail)
+// Per-slot user-cal SPI mirror (0x8000-0x80FF), RAM only. 0xFF = blank → factory
+// fallback. Each Pro Controller has its own motion-cal region.
+static uint8_t g_user_cal[PP_NSLOT][0x100];
+static bool g_user_cal_init[PP_NSLOT];
+static void jc_spi_write(int slot, uint32_t addr, uint8_t len, const uint8_t *data, uint16_t avail)
 {
 	for (uint8_t i = 0; i < len && i < avail; i++) {
 		uint32_t a = addr + i;
 		if (a >= 0x8000 && a < 0x8100)
-			g_user_cal[a - 0x8000] = data[i];
+			g_user_cal[slot][a - 0x8000] = data[i];
 	}
 }
-static void spi_read(uint32_t addr, uint8_t len, uint8_t *dst)
+static void spi_read(int slot, uint32_t addr, uint8_t len, uint8_t *dst)
 {
-	if (!g_user_cal_init) {
-		memset(g_user_cal, 0xFF, sizeof(g_user_cal));
-		g_user_cal_init = true;
+	if (!g_user_cal_init[slot]) {
+		memset(g_user_cal[slot], 0xFF, sizeof(g_user_cal[slot]));
+		g_user_cal_init[slot] = true;
 	}
 	for (uint8_t i = 0; i < len; i++) {
 		uint32_t a = addr + i;
@@ -382,7 +386,7 @@ static void spi_read(uint32_t addr, uint8_t len, uint8_t *dst)
 		else if (a >= 0x6050 && a < 0x6050 + 13) v = SPI_COLOR[a - 0x6050];
 		else if (a >= 0x6080 && a < 0x6080 + 24) v = SPI_PARAMS1[a - 0x6080];
 		else if (a >= 0x6098 && a < 0x6098 + 18) v = SPI_PARAMS2[a - 0x6098];
-		else if (a >= 0x8000 && a < 0x8100) v = g_user_cal[a - 0x8000];
+		else if (a >= 0x8000 && a < 0x8100) v = g_user_cal[slot][a - 0x8000];
 		dst[i] = v;
 	}
 }
@@ -393,27 +397,29 @@ static const uint8_t BT_PAIR_2[31] = {
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 };
 
-// ---- reply FIFO (single interface) -----------------------------------------
+// ---- per-slot reply FIFO ----------------------------------------------------
 #define JC_REPLEN 63
 #define JCQ_N 8
 typedef struct { uint8_t rid; uint8_t data[JC_REPLEN]; } jc_rep_t;
-static jc_rep_t g_jcq[JCQ_N];
-static uint8_t g_jcq_h, g_jcq_t;
-static void jc_enq(uint8_t rid, const uint8_t *d, uint8_t len)
+static jc_rep_t g_jcq[PP_NSLOT][JCQ_N];
+static uint8_t g_jcq_h[PP_NSLOT], g_jcq_t[PP_NSLOT];
+static void jc_enq(int slot, uint8_t rid, const uint8_t *d, uint8_t len)
 {
-	uint8_t nt = (uint8_t)((g_jcq_t + 1) % JCQ_N);
-	if (nt == g_jcq_h) return;  // full → drop; host re-requests on timeout
+	uint8_t nt = (uint8_t)((g_jcq_t[slot] + 1) % JCQ_N);
+	if (nt == g_jcq_h[slot]) return;  // full → drop; host re-requests on timeout
 	if (len > JC_REPLEN) len = JC_REPLEN;
-	g_jcq[g_jcq_t].rid = rid;
-	memset(g_jcq[g_jcq_t].data, 0, JC_REPLEN);
-	memcpy(g_jcq[g_jcq_t].data, d, len);
-	g_jcq_t = nt;
+	g_jcq[slot][g_jcq_t[slot]].rid = rid;
+	memset(g_jcq[slot][g_jcq_t[slot]].data, 0, JC_REPLEN);
+	memcpy(g_jcq[slot][g_jcq_t[slot]].data, d, len);
+	g_jcq_t[slot] = nt;
 }
 
 // Build the 0x21 reply (input prefix + ACK + echoed subcommand + reply data).
 static void jc_subcmd(int slot, uint8_t sub, const uint8_t *args, uint16_t alen)
 {
 	uint8_t p[JC_REPLEN];
+	uint8_t mac[6];
+	jc_mac(slot, mac);
 	memset(p, 0, sizeof(p));
 	jc_input_prefix(slot, p);
 	p[13] = sub;
@@ -423,7 +429,7 @@ static void jc_subcmd(int slot, uint8_t sub, const uint8_t *args, uint16_t alen)
 		p[12] = 0x81;
 		if (ty == 1) {
 			p[14] = 0x01;
-			memcpy(&p[15], g_jcMac, 6);
+			memcpy(&p[15], mac, 6);
 			p[21] = 0x00; p[22] = 0x25; p[23] = 0x08;
 			static const uint8_t NAME[14] = {
 				0x50, 0x72, 0x6F, 0x20, 0x43, 0x6F, 0x6E,
@@ -443,7 +449,7 @@ static void jc_subcmd(int slot, uint8_t sub, const uint8_t *args, uint16_t alen)
 		p[15] = 0x48;
 		p[16] = 0x03;  // Pro Controller
 		p[17] = 0x02;
-		memcpy(&p[18], g_jcMac, 6);
+		memcpy(&p[18], mac, 6);
 		p[24] = 0x01;
 		p[25] = 0x01;
 		break;
@@ -456,21 +462,21 @@ static void jc_subcmd(int slot, uint8_t sub, const uint8_t *args, uint16_t alen)
 		p[12] = 0x90;
 		p[14] = args[0]; p[15] = args[1]; p[16] = args[2]; p[17] = args[3];
 		p[18] = rl;
-		spi_read(a, rl, &p[19]);
+		spi_read(slot, a, rl, &p[19]);
 		break;
 	}
 	case 0x11:  // SPI flash write → mirror user cal
 		if (alen >= 5) {
 			uint32_t a = (uint32_t)args[0] | ((uint32_t)args[1] << 8) |
 				     ((uint32_t)args[2] << 16) | ((uint32_t)args[3] << 24);
-			jc_spi_write(a, args[4], &args[5],
+			jc_spi_write(slot, a, args[4], &args[5],
 				     (alen > 5) ? (uint16_t)(alen - 5) : 0);
 		}
 		p[12] = 0x80;
 		break;
 	case 0x03:  // set input report mode
 		if (alen >= 1 && args[0] == 0x30)
-			g_reportMode = 0x30;
+			g_reportMode[slot] = 0x30;
 		p[12] = 0x80;
 		break;
 	case 0x04:  // trigger elapsed time
@@ -484,7 +490,7 @@ static void jc_subcmd(int slot, uint8_t sub, const uint8_t *args, uint16_t alen)
 		p[12] = 0x80;  // generic ACK
 		break;
 	}
-	jc_enq(0x21, p, JC_REPLEN);
+	jc_enq(slot, 0x21, p, JC_REPLEN);
 }
 
 // ---- emu interface ---------------------------------------------------------
@@ -502,15 +508,16 @@ static void swpro_set(int slot, uint8_t rid, uint8_t type, const uint8_t *b, uin
 	if (id == 0x80) {  // USB handshake
 		if (pn < 1) return;
 		if (p[0] == 0x01) {
-			uint8_t d[9] = { 0x01, 0x00, 0x03, g_jcMac[0], g_jcMac[1],
-					 g_jcMac[2], g_jcMac[3], g_jcMac[4], g_jcMac[5] };
-			jc_enq(0x81, d, 9);
+			uint8_t mac[6]; jc_mac(slot, mac);
+			uint8_t d[9] = { 0x01, 0x00, 0x03, mac[0], mac[1],
+					 mac[2], mac[3], mac[4], mac[5] };
+			jc_enq(slot, 0x81, d, 9);
 		} else if (p[0] == 0x02) {
 			uint8_t d[1] = { 0x02 };
-			jc_enq(0x81, d, 1);
+			jc_enq(slot, 0x81, d, 1);
 		} else if (p[0] == 0x03) {
 			uint8_t d[1] = { 0x03 };
-			jc_enq(0x81, d, 1);
+			jc_enq(slot, 0x81, d, 1);
 		}
 		return;
 	}
@@ -554,26 +561,26 @@ static uint16_t swpro_build(int slot, uint8_t *out, uint8_t *rid)
 {
 	jc_build_stick_cal();
 	// Drain one queued handshake/subcommand reply per cycle (ordered), ahead of
-	// any streamed input, so a bursty host-init isn't starved.
-	if (g_jcq_h != g_jcq_t) {
-		jc_rep_t *r = &g_jcq[g_jcq_h];
+	// any streamed input, so a bursty host-init isn't starved. Per-slot FIFO.
+	if (g_jcq_h[slot] != g_jcq_t[slot]) {
+		jc_rep_t *r = &g_jcq[slot][g_jcq_h[slot]];
 		*rid = r->rid;
 		memcpy(out, r->data, JC_REPLEN);
-		g_jcq_h = (uint8_t)((g_jcq_h + 1) % JCQ_N);
+		g_jcq_h[slot] = (uint8_t)((g_jcq_h[slot] + 1) % JCQ_N);
 		return JC_REPLEN;
 	}
-	if (g_reportMode != 0x30)
+	if (g_reportMode[slot] != 0x30)
 		return 0;  // not until the host selects report mode 0x30
 	// Rate-limit the 0x30 stream by the configured Switch cadence (the console
-	// integrates 3 IMU samples/report at a fixed ~5 ms/sample).
-	static uint32_t last_ms;
+	// integrates 3 IMU samples/report at a fixed ~5 ms/sample). Per-slot timer.
+	static uint32_t last_ms[PP_NSLOT];
 	uint8_t rate = settings()->sw_pro_rate;
 	uint32_t interval = (rate == 2) ? SW_STREAM_MS :
 			    (rate == 1) ? SW_PRO_REPORT_MS_120 : SW_PRO_REPORT_MS;
 	uint32_t t = to_ms_since_boot(get_absolute_time());
-	if (t - last_ms < interval)
+	if (t - last_ms[slot] < interval)
 		return 0;
-	last_ms = t;
+	last_ms[slot] = t;
 	*rid = 0x30;
 	swpro_build_30(slot, out);
 	return 63;

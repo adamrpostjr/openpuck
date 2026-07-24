@@ -10,10 +10,11 @@
 void emu_present_task(void);
 
 // HID feature/output dispatch for emulated modes (routed from the shared
-// tud_hid callbacks when not in a puck mode).
-uint16_t emu_get_report(uint8_t report_id, uint8_t type, uint8_t *buf,
-			uint16_t reqlen);
-void emu_set_report(uint8_t report_id, uint8_t type, const uint8_t *buf,
-		    uint16_t len);
+// tud_hid callbacks when not in a puck mode). `instance` is the HID interface,
+// which maps 1:1 to the controller slot.
+uint16_t emu_get_report(uint8_t instance, uint8_t report_id, uint8_t type,
+			uint8_t *buf, uint16_t reqlen);
+void emu_set_report(uint8_t instance, uint8_t report_id, uint8_t type,
+		    const uint8_t *buf, uint16_t len);
 
 #endif // PICOPUCK_EMU_PRESENT_H

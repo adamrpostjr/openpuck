@@ -43,4 +43,9 @@ enum {
 // Cache the active mode's descriptors. Call once at boot, before tud_init().
 void usb_descriptors_init(void);
 
+// Number of emulated HID interfaces presented in the active emulated mode (one
+// per paired controller; 1 otherwise). Used to fan the report stream + report
+// callbacks across interface==slot.
+uint8_t usb_emu_iface_count(void);
+
 #endif // PICOPUCK_USB_DESCRIPTORS_H
