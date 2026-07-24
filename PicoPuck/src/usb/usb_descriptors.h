@@ -40,4 +40,7 @@ enum {
 #define VENDOR_REQUEST_WEBUSB 1
 #define VENDOR_REQUEST_MICROSOFT 2
 
+// Cache the active mode's descriptors. Call once at boot, before tud_init().
+void usb_descriptors_init(void);
+
 #endif // PICOPUCK_USB_DESCRIPTORS_H

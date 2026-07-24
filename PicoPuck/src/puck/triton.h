@@ -39,6 +39,9 @@
 #define TB_LPADC 0x4000000u
 #define TB_R2 0x800000u
 #define TB_L2 0x8000000u
+// Virtual PS targets (remap-only; bits the SC2 0x45 report never uses).
+#define TB_TOUCH 0x40000000u  // PS touchpad click
+#define TB_MUTE 0x80000000u   // PS5 mute
 
 // Decoded controller input, one per slot.
 typedef struct {
@@ -63,5 +66,9 @@ uint8_t puck_synth45(const puck_input_t *in, uint8_t seq, uint32_t usec,
 
 // 8-way HID hat (0 idle, 1..8 clockwise from N) → TB_ dpad bits.
 uint32_t triton_hat_bits(uint8_t hat);
+
+// Decode an SC2 report 0x45 / 0x42 (rep[0]=id, rep[1]=seq) into `io`. `tlen` is
+// the full report length incl id; IMU is decoded only when tlen >= 46.
+void triton_decode45(const uint8_t *rep, uint8_t tlen, puck_input_t *io);
 
 #endif // PICOPUCK_TRITON_H

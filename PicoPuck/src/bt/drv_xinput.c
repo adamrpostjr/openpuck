@@ -73,8 +73,8 @@ static bool xi_decode(uint8_t rid, const uint8_t *d, uint16_t len,
 	if (b1 & 0x40) b |= TB_LB;
 	if (b1 & 0x80) b |= TB_RB;
 	if (len > 14) {
-		if (b2 & 0x04) b |= TB_VIEW;   // View / Select (⧉)
-		if (b2 & 0x08) b |= TB_MENU;   // Menu / Start (☰)
+		if (b2 & 0x04) b |= TB_MENU;   // Xbox "View" (⧉) → SC2 Menu (Back/Select)
+		if (b2 & 0x08) b |= TB_VIEW;   // Xbox "Menu" (☰) → SC2 View (Start)
 		if (b2 & 0x10) b |= TB_STEAM;  // Xbox / Guide
 		if (b2 & 0x20) b |= TB_L3;     // Left stick click
 		if (b2 & 0x40) b |= TB_R3;     // Right stick click

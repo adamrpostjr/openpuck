@@ -15,6 +15,8 @@
 #include "bt/bt_hogp.h"
 #include "puck/personality.h"
 #include "puck/triton.h"
+#include "puck/slots.h"
+#include "sys/settings.h"
 #include "config/picopuck_config.h"
 
 #include <stdio.h>
@@ -66,6 +68,7 @@ static struct {
 } s_connecting;
 
 static uint16_t s_adv_seen;  // diagnostic: raw advertising reports since scan start
+static uint32_t s_last_rssi_ms;
 static uint8_t s_bt_rep[PP_NSLOT];  // diagnostic: input reports received from BT per slot
 uint8_t bt_report_count(int slot)
 {
@@ -384,6 +387,10 @@ static void packet_handler(uint8_t type, uint16_t channel, uint8_t *packet,
 		if (s_last_state == HCI_STATE_WORKING) {
 			s_ready = true;
 			printf("[bt] host up (dual-mode)\n");
+			// Load bonded devices into the controller resolving list so a
+			// returning RPA controller resolves to its bonded identity address
+			// (which addr_bonded_le then matches). Must run before scanning.
+			gap_load_resolving_list_from_le_device_db();
 			scan_ensure();  // begin reconnect scan if bonds exist
 		}
 		break;
@@ -402,6 +409,16 @@ static void packet_handler(uint8_t type, uint16_t channel, uint8_t *packet,
 		    HCI_SUBEVENT_LE_CONNECTION_COMPLETE)
 			handle_le_connection_complete(packet);
 		break;
+	case GAP_EVENT_RSSI_MEASUREMENT: {
+		hci_con_handle_t h = gap_event_rssi_measurement_get_con_handle(packet);
+		int slot = slot_by_handle(h);
+		if (slot >= 0) {
+			int8_t r = (int8_t)gap_event_rssi_measurement_get_rssi(packet);
+			g_conn[slot].rssi = r;
+			g_link_rssi[slot] = r;
+		}
+		break;
+	}
 	case HCI_EVENT_DISCONNECTION_COMPLETE: {
 		hci_con_handle_t h =
 			hci_event_disconnection_complete_get_connection_handle(packet);
@@ -445,6 +462,9 @@ static void sm_handler(uint8_t type, uint16_t channel, uint8_t *packet,
 				sm_event_pairing_complete_get_handle(packet));
 			if (slot >= 0)
 				resolve_name(slot);
+			// Add the freshly-bonded device to the resolving list so it
+			// resolves on its next reconnect (RPA pads rotate their address).
+			gap_load_resolving_list_from_le_device_db();
 		}
 		break;
 	}
@@ -469,8 +489,12 @@ static void route_connection(int slot)
 	c->hid_started = true;
 	c->is_valve = (strstr(c->name, "Steam") != NULL);
 	c->drv = input_driver_match(0, 0, c->name, true);
-	puck_set_bond(slot, c->addr, c->drv ? c->drv->kind : 0);
+	uint8_t kind = c->drv ? c->drv->kind : 0;
+	puck_set_bond(slot, c->addr, kind);
 	puck_set_connected(slot, true);
+	// Persist the label so this pad still shows its real name/kind while offline
+	// (bonds outlive reboots; the BT stack doesn't keep the name).
+	settings_bond_remember(c->addr, (uint8_t)c->addr_type, kind, c->name);
 
 	if (c->is_valve)
 		valve_start(slot, c->handle);       // SC2 proprietary Valve GATT
@@ -561,6 +585,7 @@ static void classic_handler(uint8_t type, uint16_t channel, uint8_t *packet,
 		c->active = true;
 		c->is_classic = true;
 		c->hids_cid = cid;
+		c->handle = hid_subevent_connection_opened_get_con_handle(packet);
 		hid_subevent_connection_opened_get_bd_addr(packet, c->addr);
 		memcpy(c->name, s_connecting.name, sizeof(c->name));
 		s_connecting.busy = false;
@@ -574,6 +599,7 @@ static void classic_handler(uint8_t type, uint16_t channel, uint8_t *packet,
 		printf("[bt] Classic slot %d driver '%s'\n", slot, c->drv->name);
 		puck_set_bond(slot, c->addr, c->drv->kind);
 		puck_set_connected(slot, true);
+		settings_bond_remember(c->addr, 0 /*Classic*/, c->drv->kind, c->name);
 		break;
 	}
 	case HID_SUBEVENT_REPORT: {
@@ -666,6 +692,16 @@ void bt_host_task(void)
 
 	scan_ensure();     // keep reconnect scan matched to need
 	valve_periodic();  // SC2 lizard-off keepalive + IMU enable
+	hogp_periodic();   // HOGP battery poll
+
+	// Sample link RSSI ~1 Hz for the signal-strength report.
+	uint32_t nrssi = now_ms();
+	if (nrssi - s_last_rssi_ms >= 1000) {
+		s_last_rssi_ms = nrssi;
+		for (int i = 0; i < PP_NSLOT; i++)
+			if (g_conn[i].active && g_conn[i].handle)
+				gap_read_rssi(g_conn[i].handle);
+	}
 
 	// Flush latched rumble, rate-limited.
 	uint32_t t = now_ms();
@@ -725,6 +761,25 @@ bool bt_slot_info(int slot, uint8_t *kind, int8_t *rssi, uint8_t addr[6],
 	memcpy(addr, c->addr, 6);
 	memcpy(name, c->name, 16);
 	return true;
+}
+
+uint8_t bt_bond_offline_list(uint8_t addr[][6], uint8_t *type, uint8_t max)
+{
+	uint8_t n = 0;
+	int dbmax = le_device_db_max_count();
+	for (int i = 0; i < dbmax && n < max; i++) {
+		int t;
+		bd_addr_t a;
+		le_device_db_info(i, &t, a, NULL);
+		if (t == (int)BD_ADDR_TYPE_UNKNOWN)
+			continue;      // empty DB entry
+		if (addr_connected(a))
+			continue;      // already shown as a live slot
+		memcpy(addr[n], a, 6);
+		type[n] = (uint8_t)t;
+		n++;
+	}
+	return n;
 }
 
 void bt_scan_start(uint16_t seconds)
@@ -832,9 +887,10 @@ void bt_forget(const uint8_t addr[6], uint8_t addr_type)
 	for (int i = 0; i < PP_NSLOT; i++)
 		if (g_conn[i].active && memcmp(g_conn[i].addr, addr, 6) == 0)
 			conn_disconnect(&g_conn[i]);
-	// Drop both bond stores (whichever holds it).
+	// Drop both bond stores (whichever holds it) and our persisted label.
 	gap_delete_bonding((bd_addr_type_t)addr_type, (uint8_t *)addr);
 	gap_drop_link_key_for_bd_addr((uint8_t *)addr);
+	settings_bond_forget(addr);
 }
 
 void bt_forget_all(void)

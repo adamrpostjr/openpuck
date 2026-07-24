@@ -59,13 +59,33 @@ been run on real hardware** yet. Everything below is correct-by-construction
 (ported from OpenPuck / joypad-os byte layouts and the reversed SC2 protocol);
 expect to iterate once flashed.
 
-### Follow-on drivers / features (same interfaces, deferred)
+### Output modes (profile switching)
 
-- **DualSense (DS5)** — Classic, needs the CRC32-sealed output report and
-  adaptive-trigger/touchpad handling; add a `drv_ds5` implementing `input_driver_t`.
-- **Switch Pro** — Classic, needs the subcommand init handshake before it reports.
-- **Battery** — read the BLE Battery Service (and the SC2's battery channel) into
-  `g_battery[slot]` so Steam shows a level instead of the wired glyph.
+PicoPuck presents whichever controller the active **mode** selects, fed by the
+connected Bluetooth controller's canonical input — the same `g_in` → report
+path as OpenPuck. Switch modes from the panel's *Output mode* selector or by a
+controller chord (hold **L2+R2+LB+RB** on a generic pad, or all four back
+paddles on an SC2, then A=Steam / B=PS5 / X=DS4 / Y=Switch); the device persists
+the mode and reboots into it.
+
+- [x] **Steam / Lizard** — Valve puck (transparent SC2 / synth for generic pads)
+- [x] **PS5 DualSense** — `054C:0CE6`, gyro + split trackpad + rumble
+- [x] **DS4 / HID gyro** — `054C:05C4`, gyro + trackpad + rumble
+- [x] **Switch HORIPAD** — `0F0D:0092`
+- [x] **Xbox 360 (XInput)** — `045E:028E`, custom vendor-class driver (`xinput.c`) alongside WebUSB + rumble
+- [x] **Switch Pro** — `057E:2009`, subcommand handshake + SPI cal + HD-rumble decoder
+- [x] **PS3 / Sixaxis** — `054C:0268`, feature-report console enable handshake + rumble
+
+### Follow-on Bluetooth *input-source* drivers (deferred)
+
+These are additional controllers PicoPuck could *read* over Bluetooth (each an
+`input_driver_t` decoding into `g_in`) — separate from the USB *output* modes
+above, which are all implemented.
+
+- **DualSense (DS5) as a source** — Classic, needs the CRC32-sealed output report
+  and adaptive-trigger/touchpad handling; add a `drv_ds5`.
+- **Switch Pro as a source** — Classic, needs the subcommand init handshake
+  before it reports.
 - Concurrency/bandwidth and soak testing (see risks).
 
 ## Known risks / open questions

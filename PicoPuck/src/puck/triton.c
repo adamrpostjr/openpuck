@@ -57,6 +57,47 @@ uint8_t puck_synth45(const puck_input_t *in, uint8_t seq, uint32_t usec,
 	return PUCK45_LEN;
 }
 
+// Field decoders: offset is relative to rep[2] (the buttons low byte), matching
+// OpenPuck's s16off/u16off/trigU8.
+static inline int rd_s16(const uint8_t *r, int off)
+{
+	int v = r[2 + off] | (r[2 + off + 1] << 8);
+	return (v & 0x8000) ? v - 0x10000 : v;
+}
+static inline int rd_u16(const uint8_t *r, int off)
+{
+	return r[2 + off] | (r[2 + off + 1] << 8);
+}
+static inline uint8_t trig_u8(int u16v)
+{
+	int v = u16v >> 7;
+	return (uint8_t)(v > 255 ? 255 : v);
+}
+
+void triton_decode45(const uint8_t *rep, uint8_t tlen, puck_input_t *io)
+{
+	io->buttons = (uint32_t)rep[2] | ((uint32_t)rep[3] << 8) |
+		      ((uint32_t)rep[4] << 16) | ((uint32_t)rep[5] << 24);
+	io->lt = trig_u8(rd_u16(rep, 4));
+	io->rt = trig_u8(rd_u16(rep, 6));
+	io->lx = (int16_t)rd_s16(rep, 8);
+	io->ly = (int16_t)rd_s16(rep, 10);
+	io->rx = (int16_t)rd_s16(rep, 12);
+	io->ry = (int16_t)rd_s16(rep, 14);
+	io->lpx = (int16_t)rd_s16(rep, 16);
+	io->lpy = (int16_t)rd_s16(rep, 18);
+	io->rpx = (int16_t)rd_s16(rep, 22);
+	io->rpy = (int16_t)rd_s16(rep, 24);
+	if (tlen >= 46) {
+		io->ax = (int16_t)rd_s16(rep, 32);
+		io->ay = (int16_t)rd_s16(rep, 34);
+		io->az = (int16_t)rd_s16(rep, 36);
+		io->gx = (int16_t)rd_s16(rep, 38);
+		io->gy = (int16_t)rd_s16(rep, 40);
+		io->gz = (int16_t)rd_s16(rep, 42);
+	}
+}
+
 uint32_t triton_hat_bits(uint8_t hat)
 {
 	static const uint32_t T[9] = {

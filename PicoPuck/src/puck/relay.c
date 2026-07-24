@@ -27,3 +27,19 @@ void relay_enqueue(int slot, uint8_t report_id, const uint8_t *body, uint16_t le
 	g_relay_last_id = report_id;
 	bt_relay(slot, report_id, body, len);
 }
+
+void puck_rumble(int slot, uint16_t lo, uint16_t hi)
+{
+	uint16_t inten = (lo > hi) ? lo : hi;
+	uint8_t p[9];
+	p[0] = inten ? 0x04 : 0x00;  // HAPTIC_TYPE_RUMBLE / off
+	p[1] = (uint8_t)(inten & 0xFF);
+	p[2] = (uint8_t)(inten >> 8);
+	p[3] = (uint8_t)(lo & 0xFF);
+	p[4] = (uint8_t)(lo >> 8);
+	p[5] = 0;
+	p[6] = (uint8_t)(hi & 0xFF);
+	p[7] = (uint8_t)(hi >> 8);
+	p[8] = 0;
+	relay_enqueue(slot, 0x80, p, 9);
+}

@@ -124,7 +124,10 @@ static void notify_handler(uint8_t type, uint16_t channel, uint8_t *packet,
 		len = sizeof(rep) - 1;
 	rep[0] = v->report_id;
 	memcpy(rep + 1, val, len);
-	puck_present_raw(v->slot, rep, (uint8_t)(len + 1));  // transparent forward
+	// Decode into g_in so emulated modes work with an SC2 too; puck mode also
+	// forwards the raw report verbatim (transparent). rep[1] is seq.
+	triton_decode45(rep, (uint8_t)(len + 1), &g_in[v->slot]);
+	puck_present_raw(v->slot, rep, (uint8_t)(len + 1));
 }
 
 static void write_cb(uint8_t type, uint16_t channel, uint8_t *packet, uint16_t size)

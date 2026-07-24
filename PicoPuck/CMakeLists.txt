@@ -46,6 +46,17 @@ target_sources(picopuck PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/puck/personality.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/puck/relay.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/puck/triton.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/puck/chord.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/puck/gamepad_util.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/puck/emu.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/puck/emu_present.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/puck/mode_switch_hori.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/puck/mode_ds4.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/puck/mode_ps5.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/puck/mode_ps3.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/puck/mode_switch_pro.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/puck/xinput.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/sys/settings.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/bt/bt_control_stub.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/bt/bt_host.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/bt/bt_valve.c

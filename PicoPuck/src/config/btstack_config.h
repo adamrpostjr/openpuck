@@ -26,6 +26,12 @@
 // central-only build fails to compile without it. Matches joypad-os's config.
 #define ENABLE_LE_PERIPHERAL
 #define ENABLE_LE_SECURE_CONNECTIONS
+// Resolve bonded controllers' resolvable private addresses (SC2, DualSense, most
+// modern BLE pads rotate their RPA), so auto-reconnect can match a returning pad
+// against its bond after a reboot. Without this the advert address never equals
+// the stored identity address and the reconnect scan never fires. The controller
+// resolving list is loaded from the LE device DB at HCI-working + after pairing.
+#define ENABLE_LE_PRIVACY_ADDRESS_RESOLUTION
 
 #ifndef ENABLE_CLASSIC
 #define ENABLE_CLASSIC

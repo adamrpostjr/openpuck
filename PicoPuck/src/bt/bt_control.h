@@ -39,6 +39,12 @@ void bt_scan_diag(uint16_t *adv_seen, uint8_t *flags, uint8_t *hci_state,
 // Copy up to `max` scan entries into `out`; returns the count written.
 uint8_t bt_scan_list(bt_scan_entry_t *out, uint8_t max);
 
+// Enumerate persisted LE bonds that are NOT currently connected, so the panel
+// can show paired controllers that are simply offline (e.g. right after a reboot
+// or mode switch, before they reconnect). Fills addr[i][0..5] + type[i]; returns
+// the count. Bonds are global — they are not tied to the active output mode.
+uint8_t bt_bond_offline_list(uint8_t addr[][6], uint8_t *type, uint8_t max);
+
 bool bt_pair(const uint8_t addr[6], uint8_t addr_type);
 void bt_forget(const uint8_t addr[6], uint8_t addr_type);
 void bt_forget_all(void);

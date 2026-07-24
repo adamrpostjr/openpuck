@@ -36,6 +36,9 @@ extern puck_slot_t g_slot[PP_NSLOT];
 extern uint8_t g_battery[PP_NSLOT];
 extern uint8_t g_battery_state[PP_NSLOT];
 
+// Per-slot link RSSI in dBm (negative; 0 = no sample yet), from the BT stack.
+extern int8_t g_link_rssi[PP_NSLOT];
+
 // True while a controller is currently presented on this slot (connected and
 // producing input recently). Drives 0xB4 / 0x79.
 bool slot_is_live(int slot, uint32_t now_ms);

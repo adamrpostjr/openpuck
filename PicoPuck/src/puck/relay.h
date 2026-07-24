@@ -20,6 +20,11 @@
 extern volatile uint16_t g_relay_count;
 extern volatile uint8_t g_relay_last_id;
 
+// Build the SC2 0x80 rumble report from 16-bit motor magnitudes and relay it to
+// the controller bound to `slot` (OpenPuck's hapticSteamRumble). Emulated modes
+// call this from their host output-report handlers.
+void puck_rumble(int slot, uint16_t lo, uint16_t hi);
+
 // Forward the HID report [report_id][body...] to the controller bound to `slot`
 // (SC2: written verbatim to the Valve report characteristic; generic pad: 0x80
 // rumble mapped to the pad's output). No length byte is re-inserted — pass the

@@ -7,6 +7,7 @@
 puck_slot_t g_slot[PP_NSLOT];
 uint8_t g_battery[PP_NSLOT];
 uint8_t g_battery_state[PP_NSLOT];
+int8_t g_link_rssi[PP_NSLOT];
 
 // A slot counts as "live" for a short window after its last input report, so a
 // brief BT hiccup doesn't bounce the connection state Steam sees. Mirrors the
@@ -18,6 +19,7 @@ void slots_init(void)
 	memset(g_slot, 0, sizeof(g_slot));
 	memset(g_battery, 0, sizeof(g_battery));
 	memset(g_battery_state, 0, sizeof(g_battery_state));
+	memset(g_link_rssi, 0, sizeof(g_link_rssi));
 }
 
 bool slot_is_live(int slot, uint32_t now_ms)

@@ -1,18 +1,23 @@
 // PicoPuck main — core0 cooperative loop.
 //
-// Phase 1: bring up the puck USB identity (four HID slots + WebUSB) and answer
-// Steam's command channel with no controllers connected. Bluetooth (BTstack
-// host) is layered on in later phases; the loop already reserves its slot.
+// Presents either the Valve puck (Steam/Lizard) or an emulated controller
+// (Xbox/Switch/PS5/PS3/…) over USB, fed by controllers connected over Bluetooth.
+// The active mode is loaded from flash at boot; switching it persists + reboots.
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 #include "config/picopuck_config.h"
+#include "config/modes.h"
 #include "puck/identity.h"
 #include "puck/slots.h"
 #include "puck/personality.h"
+#include "puck/emu_present.h"
+#include "puck/xinput.h"
 #include "usb/usb_tx.h"
+#include "usb/usb_descriptors.h"
 #include "usb/webusb.h"
 #include "bt/bt_host.h"
+#include "sys/settings.h"
 
 #include "pico/stdlib.h"
 #include "pico/cyw43_arch.h"
@@ -23,23 +28,26 @@ int main(void)
 {
 	stdio_init_all();
 
+	settings_load();  // active USB mode (before descriptors)
 	identity_init();
 	slots_init();
 	puck_personality_init();
 	webusb_init();
 
-	// USB device stack (puck HID slots + WebUSB vendor interface).
+	// Build the descriptor set for the active mode, then start USB.
+	usb_descriptors_init();
 	tud_init(0);
 
-	// The user LED hangs off the CYW43 chip; this init also hands the radio to
-	// BTstack in a later phase (btstack_cyw43_init on the async_context).
-	bool have_radio = (cyw43_arch_init() == 0);
+	bool puck = mode_is_puck(settings_mode());
+	bool xinput = mode_is_xinput(settings_mode());
 
-	// Bring up the Bluetooth host on the radio (dual-mode Classic + BLE).
+	// The user LED hangs off the CYW43 chip; this init also hands the radio to
+	// BTstack (btstack_cyw43_init on the async_context).
+	bool have_radio = (cyw43_arch_init() == 0);
 	bool have_bt = have_radio && bt_host_init();
 
-	printf("\n[picopuck] boot commit=%s board=%d radio=%d bt=%d\n",
-	       PICOPUCK_GIT_COMMIT, PP_BOARD, have_radio, have_bt);
+	printf("\n[picopuck] boot commit=%s board=%d mode=%d radio=%d bt=%d\n",
+	       PICOPUCK_GIT_COMMIT, PP_BOARD, settings_mode(), have_radio, have_bt);
 
 	watchdog_enable(PP_WATCHDOG_MS, /*pause_on_debug=*/true);
 
@@ -47,14 +55,21 @@ int main(void)
 	bool led_on = false;
 
 	while (1) {
-		tud_task();               // USB device events
-		usb_tx_pump();            // drain queued HID reports
-		puck_personality_task();  // 0x79 / 0x7B / 0x43 status
-		webusb_task();            // panel commands
+		tud_task();       // USB device events
+		usb_tx_pump();    // drain queued HID reports
+
+		if (puck)
+			puck_personality_task();  // puck 0x79 / 0x7B / 0x43 + synth stream
+		else if (xinput)
+			xinput_task();            // Xbox 360 XInput report stream
+		else
+			emu_present_task();       // emulated controller report stream
+
+		webusb_task();    // panel commands (works in every mode)
 
 		if (have_bt) {
 			cyw43_arch_poll();  // services BTstack on its async_context
-			bt_host_task();     // scan timeout + rumble flush
+			bt_host_task();     // scan / battery / rssi / rumble
 		} else if (have_radio) {
 			cyw43_arch_poll();
 		}

@@ -1,10 +1,10 @@
-// usb_descriptors.c — TinyUSB descriptor callbacks for the puck identity.
+// usb_descriptors.c — mode-aware TinyUSB descriptors.
 //
-// Presents VID/PID 28DE:1304 with four HID slot interfaces (each the cloned
-// puck report descriptor) plus a WebUSB vendor interface (WinUSB-bound via an
-// MS OS 2.0 descriptor so Chrome can open it without a manual driver). bcdDevice
-// is 0x03xx to distinguish PicoPuck from the nRF puck in the panel and in
-// Windows' per-(VID,PID,bcdDevice) descriptor cache.
+// Puck modes (Steam/Lizard) present VID/PID 28DE:1304 with four HID slot
+// interfaces (the cloned puck descriptor) + a WebUSB vendor interface. Emulated
+// modes (Xbox/Switch/PS5/PS3/…) present that mode's controller as ONE HID
+// gamepad + the same WebUSB vendor interface (so the panel works in every mode).
+// The active mode is read from flash at boot; a mode switch persists + reboots.
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 #include <string.h>
@@ -12,120 +12,116 @@
 #include "usb/usb_descriptors.h"
 #include "usb/puck_desc.h"
 #include "puck/identity.h"
+#include "puck/emu.h"
+#include "config/modes.h"
+#include "sys/settings.h"
 
-// Set by the panel's class request (0x22) on the vendor interface.
 void webusb_set_connected(bool connected);
 
-// ---- device descriptor -----------------------------------------------------
 #if CFG_TUD_CDC
 #define PP_BCD PP_BCD_DEVICE_CDC
 #else
 #define PP_BCD PP_BCD_DEVICE
 #endif
 
-static const tusb_desc_device_t desc_device = {
-	.bLength = sizeof(tusb_desc_device_t),
-	.bDescriptorType = TUSB_DESC_DEVICE,
-	.bcdUSB = 0x0210,  // 2.1 → device advertises a BOS descriptor
-#if CFG_TUD_CDC
-	.bDeviceClass = TUSB_CLASS_MISC,
-	.bDeviceSubClass = MISC_SUBCLASS_COMMON,
-	.bDeviceProtocol = MISC_PROTOCOL_IAD,
-#else
-	.bDeviceClass = 0x00,
-	.bDeviceSubClass = 0x00,
-	.bDeviceProtocol = 0x00,
-#endif
-	.bMaxPacketSize0 = CFG_TUD_ENDPOINT0_SIZE,
-	.idVendor = PP_USB_VID,
-	.idProduct = PP_USB_PID,
-	.bcdDevice = PP_BCD,
-	.iManufacturer = 0x01,
-	.iProduct = 0x02,
-	.iSerialNumber = 0x03,
-	.bNumConfigurations = 0x01,
-};
+// ---- cached per-boot presentation ------------------------------------------
+static uint8_t s_mode;
+static const emu_mode_t *s_emu;  // NULL for puck/xinput modes
+static bool s_xinput;            // MODE_XBOX: custom vendor class, not HID
+static tusb_desc_device_t s_dev;
+static uint8_t s_emu_cfg[80];
+static uint8_t s_vendor_itf;
 
-const uint8_t *tud_descriptor_device_cb(void)
-{
-	return (const uint8_t *)&desc_device;
-}
-
-// ---- HID report descriptor (all four instances share the puck descriptor) --
-const uint8_t *tud_hid_descriptor_report_cb(uint8_t instance)
-{
-	(void)instance;
-	return PUCK_HID_DESC;
-}
-
-// ---- configuration descriptor ----------------------------------------------
-#define CONFIG_TOTAL_LEN                                                       \
-	(TUD_CONFIG_DESC_LEN + 4 * TUD_HID_DESC_LEN + TUD_VENDOR_DESC_LEN +     \
-	 CFG_TUD_CDC * TUD_CDC_DESC_LEN)
-
-static const uint8_t desc_configuration[] = {
-	TUD_CONFIG_DESCRIPTOR(1, ITF_NUM_TOTAL, 0, CONFIG_TOTAL_LEN, 0x00, 250),
-
-	// Four puck slot interfaces: IN-only, 1 ms poll, sharing PUCK_HID_DESC.
-	TUD_HID_DESCRIPTOR(ITF_NUM_HID0, 0, HID_ITF_PROTOCOL_NONE,
-			   PUCK_HID_DESC_SIZE, EPNUM_HID0, CFG_TUD_HID_EP_BUFSIZE, 1),
-	TUD_HID_DESCRIPTOR(ITF_NUM_HID1, 0, HID_ITF_PROTOCOL_NONE,
-			   PUCK_HID_DESC_SIZE, EPNUM_HID1, CFG_TUD_HID_EP_BUFSIZE, 1),
-	TUD_HID_DESCRIPTOR(ITF_NUM_HID2, 0, HID_ITF_PROTOCOL_NONE,
-			   PUCK_HID_DESC_SIZE, EPNUM_HID2, CFG_TUD_HID_EP_BUFSIZE, 1),
-	TUD_HID_DESCRIPTOR(ITF_NUM_HID3, 0, HID_ITF_PROTOCOL_NONE,
-			   PUCK_HID_DESC_SIZE, EPNUM_HID3, CFG_TUD_HID_EP_BUFSIZE, 1),
-
-	// WebUSB config channel (bulk IN/OUT). String index 4 names it.
-	TUD_VENDOR_DESCRIPTOR(ITF_NUM_VENDOR, 4, EPNUM_VENDOR_OUT, EPNUM_VENDOR_IN, 64),
-
-#if CFG_TUD_CDC
-	TUD_CDC_DESCRIPTOR(ITF_NUM_CDC, 5, EPNUM_CDC_NOTIF, 8, EPNUM_CDC_OUT,
-			   EPNUM_CDC_IN, 64),
-#endif
-};
-
-const uint8_t *tud_descriptor_configuration_cb(uint8_t index)
-{
-	(void)index;
-	return desc_configuration;
-}
-
-// ---- BOS + MS OS 2.0 (WinUSB binding for the vendor interface) -------------
 #define MS_OS_20_DESC_LEN 0xB2
+static uint8_t s_msos[MS_OS_20_DESC_LEN];
 
-#define BOS_TOTAL_LEN                                                          \
-	(TUD_BOS_DESC_LEN + TUD_BOS_WEBUSB_DESC_LEN +                          \
-	 TUD_BOS_MICROSOFT_OS_DESC_LEN)
-
-static const uint8_t desc_bos[] = {
-	TUD_BOS_DESCRIPTOR(BOS_TOTAL_LEN, 2),
-	// WebUSB: vendor request code, landing-page index 0 = no landing page
-	// (the panel opens the device directly; avoids a Chrome popup).
-	TUD_BOS_WEBUSB_DESCRIPTOR(VENDOR_REQUEST_WEBUSB, 0),
-	TUD_BOS_MS_OS_20_DESCRIPTOR(MS_OS_20_DESC_LEN, VENDOR_REQUEST_MICROSOFT),
-};
-
-const uint8_t *tud_descriptor_bos_cb(void)
+// Build the emulated-mode config descriptor: HID gamepad (itf 0, IN-only) plus
+// the WebUSB vendor interface (itf 1, bulk IN/OUT). Returns total length.
+static uint16_t build_emu_config(uint8_t *b, const emu_mode_t *emu)
 {
-	return desc_bos;
+	uint16_t rlen = emu->report_desc_len;
+	uint8_t poll = emu->poll_ms ? emu->poll_ms : 1;
+	// itf0 HID (2 endpoints: IN + OUT) + itf1 vendor (2 endpoints).
+	const uint16_t total = 9 + 9 + 9 + 7 + 7 + 9 + 7 + 7;  // 64
+	uint8_t *p = b;
+	// configuration
+	*p++ = 9; *p++ = TUSB_DESC_CONFIGURATION;
+	*p++ = (uint8_t)(total & 0xFF); *p++ = (uint8_t)(total >> 8);
+	*p++ = 2; *p++ = 1; *p++ = 0; *p++ = 0x80; *p++ = 250;
+	// HID interface (itf 0) — IN + OUT so rumble / Switch-Pro subcommands ride
+	// the interrupt OUT pipe (hosts like hid-nintendo require the OUT endpoint;
+	// output reports still also work via EP0 SET_REPORT).
+	*p++ = 9; *p++ = TUSB_DESC_INTERFACE; *p++ = 0; *p++ = 0; *p++ = 2;
+	*p++ = TUSB_CLASS_HID; *p++ = 0; *p++ = 0; *p++ = 0;
+	// HID descriptor
+	*p++ = 9; *p++ = HID_DESC_TYPE_HID; *p++ = 0x11; *p++ = 0x01; *p++ = 0;
+	*p++ = 1; *p++ = HID_DESC_TYPE_REPORT;
+	*p++ = (uint8_t)(rlen & 0xFF); *p++ = (uint8_t)(rlen >> 8);
+	// HID IN endpoint
+	*p++ = 7; *p++ = TUSB_DESC_ENDPOINT; *p++ = 0x81; *p++ = 0x03;
+	*p++ = 64; *p++ = 0; *p++ = poll;
+	// HID OUT endpoint
+	*p++ = 7; *p++ = TUSB_DESC_ENDPOINT; *p++ = 0x01; *p++ = 0x03;
+	*p++ = 64; *p++ = 0; *p++ = poll;
+	// vendor interface (itf 1) — WebUSB
+	*p++ = 9; *p++ = TUSB_DESC_INTERFACE; *p++ = 1; *p++ = 0; *p++ = 2;
+	*p++ = TUSB_CLASS_VENDOR_SPECIFIC; *p++ = 0; *p++ = 0; *p++ = 0;
+	*p++ = 7; *p++ = TUSB_DESC_ENDPOINT; *p++ = 0x02; *p++ = 0x02;
+	*p++ = 64; *p++ = 0; *p++ = 0;
+	*p++ = 7; *p++ = TUSB_DESC_ENDPOINT; *p++ = 0x82; *p++ = 0x02;
+	*p++ = 64; *p++ = 0; *p++ = 0;
+	return total;
 }
 
-static const uint8_t desc_ms_os_20[] = {
-	// Set header
+// Build the XInput config: the WebUSB vendor interface FIRST (itf 0), so the
+// built-in vendor class driver claims it and — with only one vendor instance —
+// leaves the XInput interface (itf 1, class 0xFF/0x5D/0x01) for the custom
+// XInput app driver. Endpoints: vendor bulk 0x02/0x82; XInput interrupt IN
+// 0x83 / OUT 0x03. Returns total length.
+static uint16_t build_xinput_config(uint8_t *b)
+{
+	const uint16_t total = 9 + (9 + 7 + 7) + (9 + 17 + 7 + 7);  // 72
+	uint8_t *p = b;
+	// configuration (2 interfaces)
+	*p++ = 9; *p++ = TUSB_DESC_CONFIGURATION;
+	*p++ = (uint8_t)(total & 0xFF); *p++ = (uint8_t)(total >> 8);
+	*p++ = 2; *p++ = 1; *p++ = 0; *p++ = 0x80; *p++ = 250;
+	// vendor interface (itf 0) — WebUSB
+	*p++ = 9; *p++ = TUSB_DESC_INTERFACE; *p++ = 0; *p++ = 0; *p++ = 2;
+	*p++ = TUSB_CLASS_VENDOR_SPECIFIC; *p++ = 0; *p++ = 0; *p++ = 4;
+	*p++ = 7; *p++ = TUSB_DESC_ENDPOINT; *p++ = 0x02; *p++ = 0x02;
+	*p++ = 64; *p++ = 0; *p++ = 0;
+	*p++ = 7; *p++ = TUSB_DESC_ENDPOINT; *p++ = 0x82; *p++ = 0x02;
+	*p++ = 64; *p++ = 0; *p++ = 0;
+	// XInput interface (itf 1) — vendor class 0xFF/0x5D/0x01, 2 interrupt eps
+	*p++ = 9; *p++ = TUSB_DESC_INTERFACE; *p++ = 1; *p++ = 0; *p++ = 2;
+	*p++ = 0xFF; *p++ = 0x5D; *p++ = 0x01; *p++ = 0;
+	// XInput "unknown" 0x21 descriptor (verbatim; bytes 6/13 = IN/OUT ep addr)
+	*p++ = 0x11; *p++ = 0x21; *p++ = 0x00; *p++ = 0x01; *p++ = 0x01; *p++ = 0x25;
+	*p++ = 0x83; *p++ = 0x14; *p++ = 0x00; *p++ = 0x00; *p++ = 0x00; *p++ = 0x00;
+	*p++ = 0x13; *p++ = 0x03; *p++ = 0x08; *p++ = 0x00; *p++ = 0x00;
+	// XInput IN endpoint (interrupt, 0x83, 1 ms)
+	*p++ = 7; *p++ = TUSB_DESC_ENDPOINT; *p++ = 0x83; *p++ = 0x03;
+	*p++ = 0x20; *p++ = 0; *p++ = 1;
+	// XInput OUT endpoint (interrupt, 0x03, 8 ms)
+	*p++ = 7; *p++ = TUSB_DESC_ENDPOINT; *p++ = 0x03; *p++ = 0x03;
+	*p++ = 0x20; *p++ = 0; *p++ = 8;
+	return total;
+}
+
+// MS OS 2.0 template (WINUSB compatible id + DeviceInterfaceGUIDs). The
+// function-subset "first interface" byte is patched per mode at init.
+static const uint8_t k_msos_template[MS_OS_20_DESC_LEN] = {
 	U16_TO_U8S_LE(0x000A), U16_TO_U8S_LE(MS_OS_20_SET_HEADER_DESCRIPTOR),
 	U32_TO_U8S_LE(0x06030000), U16_TO_U8S_LE(MS_OS_20_DESC_LEN),
-	// Configuration subset header
 	U16_TO_U8S_LE(0x0008), U16_TO_U8S_LE(MS_OS_20_SUBSET_HEADER_CONFIGURATION),
 	0, 0, U16_TO_U8S_LE(MS_OS_20_DESC_LEN - 0x0A),
-	// Function subset header (binds the vendor interface)
 	U16_TO_U8S_LE(0x0008), U16_TO_U8S_LE(MS_OS_20_SUBSET_HEADER_FUNCTION),
-	ITF_NUM_VENDOR, 0, U16_TO_U8S_LE(MS_OS_20_DESC_LEN - 0x0A - 0x08),
-	// Compatible ID: WINUSB
+	0 /* first interface, patched */, 0,
+	U16_TO_U8S_LE(MS_OS_20_DESC_LEN - 0x0A - 0x08),
 	U16_TO_U8S_LE(0x0014), U16_TO_U8S_LE(MS_OS_20_FEATURE_COMPATBLE_ID),
 	'W', 'I', 'N', 'U', 'S', 'B', 0x00, 0x00,
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	// Registry property: DeviceInterfaceGUIDs
 	U16_TO_U8S_LE(MS_OS_20_DESC_LEN - 0x0A - 0x08 - 0x08 - 0x14),
 	U16_TO_U8S_LE(MS_OS_20_FEATURE_REG_PROPERTY),
 	U16_TO_U8S_LE(0x0007), U16_TO_U8S_LE(0x002A),
@@ -141,10 +137,102 @@ static const uint8_t desc_ms_os_20[] = {
 	'9', 0x00, 'D', 0x00, '}', 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
-TU_VERIFY_STATIC(sizeof(desc_ms_os_20) == MS_OS_20_DESC_LEN, "MS OS 2.0 size");
+void usb_descriptors_init(void)
+{
+	s_mode = settings_mode();
+	s_xinput = mode_is_xinput(s_mode);
+	s_emu = (mode_is_puck(s_mode) || s_xinput) ? NULL : emu_mode_for(s_mode);
+	if (!mode_is_puck(s_mode) && !s_xinput && !s_emu)
+		s_mode = MODE_STEAM;  // unknown/unimplemented emu mode → puck fallback
 
-// Single vendor control-transfer callback: WebUSB/MS-OS descriptor requests and
-// the panel's class "connect" request (0x22, Adafruit convention).
+	memset(&s_dev, 0, sizeof(s_dev));
+	s_dev.bLength = sizeof(tusb_desc_device_t);
+	s_dev.bDescriptorType = TUSB_DESC_DEVICE;
+	s_dev.bcdUSB = 0x0210;
+	s_dev.bMaxPacketSize0 = CFG_TUD_ENDPOINT0_SIZE;
+	s_dev.iManufacturer = 0x01;
+	s_dev.iProduct = 0x02;
+	s_dev.iSerialNumber = 0x03;
+	s_dev.bNumConfigurations = 0x01;
+	if (s_xinput) {
+		// Xbox 360 wired: Windows xusb / Linux xpad / SDL bind 045E:028E.
+		s_dev.idVendor = 0x045E;
+		s_dev.idProduct = 0x028E;
+		s_dev.bcdDevice = 0x0120;
+		build_xinput_config(s_emu_cfg);
+		s_vendor_itf = 0;  // WebUSB vendor is itf 0 in the XInput config
+	} else if (s_emu) {
+		s_dev.idVendor = s_emu->vid;
+		s_dev.idProduct = s_emu->pid;
+		s_dev.bcdDevice = s_emu->bcd;
+		build_emu_config(s_emu_cfg, s_emu);
+		s_vendor_itf = 1;
+	} else {
+		s_dev.idVendor = PP_USB_VID;
+		s_dev.idProduct = PP_USB_PID;
+		s_dev.bcdDevice = PP_BCD;
+		s_vendor_itf = ITF_NUM_VENDOR;
+	}
+
+	memcpy(s_msos, k_msos_template, MS_OS_20_DESC_LEN);
+	s_msos[22] = s_vendor_itf;  // function-subset "first interface"
+}
+
+const uint8_t *tud_descriptor_device_cb(void)
+{
+	return (const uint8_t *)&s_dev;
+}
+
+const uint8_t *tud_hid_descriptor_report_cb(uint8_t instance)
+{
+	(void)instance;
+	return s_emu ? s_emu->report_desc : PUCK_HID_DESC;
+}
+
+// ---- puck configuration descriptor -----------------------------------------
+#define PUCK_CONFIG_TOTAL_LEN                                                  \
+	(TUD_CONFIG_DESC_LEN + 4 * TUD_HID_DESC_LEN + TUD_VENDOR_DESC_LEN +     \
+	 CFG_TUD_CDC * TUD_CDC_DESC_LEN)
+
+static const uint8_t desc_configuration_puck[] = {
+	TUD_CONFIG_DESCRIPTOR(1, ITF_NUM_TOTAL, 0, PUCK_CONFIG_TOTAL_LEN, 0x00, 250),
+	TUD_HID_DESCRIPTOR(ITF_NUM_HID0, 0, HID_ITF_PROTOCOL_NONE,
+			   PUCK_HID_DESC_SIZE, EPNUM_HID0, CFG_TUD_HID_EP_BUFSIZE, 1),
+	TUD_HID_DESCRIPTOR(ITF_NUM_HID1, 0, HID_ITF_PROTOCOL_NONE,
+			   PUCK_HID_DESC_SIZE, EPNUM_HID1, CFG_TUD_HID_EP_BUFSIZE, 1),
+	TUD_HID_DESCRIPTOR(ITF_NUM_HID2, 0, HID_ITF_PROTOCOL_NONE,
+			   PUCK_HID_DESC_SIZE, EPNUM_HID2, CFG_TUD_HID_EP_BUFSIZE, 1),
+	TUD_HID_DESCRIPTOR(ITF_NUM_HID3, 0, HID_ITF_PROTOCOL_NONE,
+			   PUCK_HID_DESC_SIZE, EPNUM_HID3, CFG_TUD_HID_EP_BUFSIZE, 1),
+	TUD_VENDOR_DESCRIPTOR(ITF_NUM_VENDOR, 4, EPNUM_VENDOR_OUT, EPNUM_VENDOR_IN, 64),
+#if CFG_TUD_CDC
+	TUD_CDC_DESCRIPTOR(ITF_NUM_CDC, 5, EPNUM_CDC_NOTIF, 8, EPNUM_CDC_OUT,
+			   EPNUM_CDC_IN, 64),
+#endif
+};
+
+const uint8_t *tud_descriptor_configuration_cb(uint8_t index)
+{
+	(void)index;
+	return (s_emu || s_xinput) ? s_emu_cfg : desc_configuration_puck;
+}
+
+// ---- BOS + MS OS 2.0 --------------------------------------------------------
+#define BOS_TOTAL_LEN                                                          \
+	(TUD_BOS_DESC_LEN + TUD_BOS_WEBUSB_DESC_LEN +                          \
+	 TUD_BOS_MICROSOFT_OS_DESC_LEN)
+
+static const uint8_t desc_bos[] = {
+	TUD_BOS_DESCRIPTOR(BOS_TOTAL_LEN, 2),
+	TUD_BOS_WEBUSB_DESCRIPTOR(VENDOR_REQUEST_WEBUSB, 0),
+	TUD_BOS_MS_OS_20_DESCRIPTOR(MS_OS_20_DESC_LEN, VENDOR_REQUEST_MICROSOFT),
+};
+
+const uint8_t *tud_descriptor_bos_cb(void)
+{
+	return desc_bos;
+}
+
 bool tud_vendor_control_xfer_cb(uint8_t rhport, uint8_t stage,
 				tusb_control_request_t const *request)
 {
@@ -153,29 +241,20 @@ bool tud_vendor_control_xfer_cb(uint8_t rhport, uint8_t stage,
 
 	switch (request->bmRequestType_bit.type) {
 	case TUSB_REQ_TYPE_VENDOR:
-		switch (request->bRequest) {
-		case VENDOR_REQUEST_MICROSOFT:
-			if (request->wIndex == 7) {
-				uint16_t total_len;
-				memcpy(&total_len, desc_ms_os_20 + 8, 2);
-				return tud_control_xfer(
-					rhport, request,
-					(void *)(uintptr_t)desc_ms_os_20,
-					total_len);
-			}
-			return false;
-		default:
-			break;
+		if (request->bRequest == VENDOR_REQUEST_MICROSOFT &&
+		    request->wIndex == 7) {
+			uint16_t total_len;
+			memcpy(&total_len, s_msos + 8, 2);
+			return tud_control_xfer(rhport, request,
+						(void *)(uintptr_t)s_msos, total_len);
 		}
-		break;
-
+		return false;
 	case TUSB_REQ_TYPE_CLASS:
 		if (request->bRequest == 0x22) {
 			webusb_set_connected(request->wValue != 0);
 			return tud_control_status(rhport, request);
 		}
 		break;
-
 	default:
 		break;
 	}
@@ -184,15 +263,6 @@ bool tud_vendor_control_xfer_cb(uint8_t rhport, uint8_t stage,
 
 // ---- string descriptors ----------------------------------------------------
 enum { STRID_LANGID = 0, STRID_MANUFACTURER, STRID_PRODUCT, STRID_SERIAL, STRID_VENDOR };
-
-static const char *const string_desc_arr[] = {
-	[STRID_LANGID] = (const char[]){ 0x09, 0x04 },  // English (0x0409)
-	[STRID_MANUFACTURER] = "Valve Software",
-	[STRID_PRODUCT] = "Steam Controller Puck",
-	[STRID_SERIAL] = NULL,  // filled from g_usb_serial at runtime
-	[STRID_VENDOR] = "PicoPuck WebUSB",
-};
-
 static uint16_t desc_str[32];
 
 const uint16_t *tud_descriptor_string_cb(uint8_t index, uint16_t langid)
@@ -201,19 +271,28 @@ const uint16_t *tud_descriptor_string_cb(uint8_t index, uint16_t langid)
 	size_t chr_count;
 
 	if (index == STRID_LANGID) {
-		memcpy(&desc_str[1], string_desc_arr[0], 2);
+		desc_str[1] = 0x0409;
 		chr_count = 1;
 	} else {
 		const char *str;
-		if (index == STRID_SERIAL)
+		switch (index) {
+		case STRID_MANUFACTURER:
+			str = s_emu ? "PicoPuck" : "Valve Software";
+			break;
+		case STRID_PRODUCT:
+			str = s_emu ? s_emu->product : "Steam Controller Puck";
+			break;
+		case STRID_SERIAL:
 			str = g_usb_serial;
-		else if (index < TU_ARRAY_SIZE(string_desc_arr))
-			str = string_desc_arr[index];
-		else
+			break;
+		case STRID_VENDOR:
+			str = "PicoPuck WebUSB";
+			break;
+		default:
 			return NULL;
+		}
 		if (!str)
 			return NULL;
-
 		chr_count = strlen(str);
 		if (chr_count > 31)
 			chr_count = 31;

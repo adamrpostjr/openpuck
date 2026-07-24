@@ -11,8 +11,12 @@
 #include "puck/identity.h"
 #include "puck/relay.h"
 #include "puck/triton.h"
+#include "puck/emu_present.h"
+#include "puck/chord.h"
 #include "usb/usb_tx.h"
 #include "config/picopuck_config.h"
+#include "config/modes.h"
+#include "sys/settings.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -102,17 +106,24 @@ void puck_present_synth(int slot)
 {
 	if (slot < 0 || slot >= PP_NSLOT)
 		return;
+	chord_check(slot, false);  // generic pad: L2+R2+LB+RB guard
 	s_src[slot] = 1;
-	emit_synth(slot);  // immediate on change; the streamer fills idle gaps
+	slot_note_input(slot, now_ms());
+	// Only the puck personality emits the SC2 report; in an emulated mode the
+	// input just updates g_in (already done by the caller) and emu_present emits.
+	if (mode_is_puck(settings_mode()))
+		emit_synth(slot);
 }
 
 void puck_present_raw(int slot, const uint8_t *rep, uint8_t len)
 {
 	if (slot < 0 || slot >= PP_NSLOT || len < 1)
 		return;
+	chord_check(slot, true);  // SC2: back-paddle guard
 	s_src[slot] = 2;
-	usb_tx_hid((uint8_t)slot, rep[0], rep + 1, (uint16_t)(len - 1));
 	slot_note_input(slot, now_ms());
+	if (mode_is_puck(settings_mode()))
+		usb_tx_hid((uint8_t)slot, rep[0], rep + 1, (uint16_t)(len - 1));
 }
 
 void puck_set_connected(int slot, bool connected)
@@ -324,6 +335,8 @@ uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id,
 			       hid_report_type_t report_type, uint8_t *buffer,
 			       uint16_t reqlen)
 {
+	if (!mode_is_puck(settings_mode()))
+		return emu_get_report(report_id, report_type, buffer, reqlen);
 	return handle_get(instance, report_id, report_type, buffer, reqlen);
 }
 
@@ -331,6 +344,10 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id,
 			   hid_report_type_t report_type, uint8_t const *buffer,
 			   uint16_t bufsize)
 {
+	if (!mode_is_puck(settings_mode())) {
+		emu_set_report(report_id, report_type, buffer, bufsize);
+		return;
+	}
 	handle_set(instance, report_id, report_type, buffer, bufsize);
 }
 
@@ -362,10 +379,13 @@ void puck_personality_task(void)
 		if (!live)
 			continue;
 
-		// 0x7B status (RSSI template) every 750 ms.
+		// 0x7B status (RSSI) every 750 ms. Byte 8 is the controller signal
+		// strength as signed dBm; patch in the live sample (0 = keep template).
 		if (t - s_last_7b_ms[s] >= 750) {
 			uint8_t s7b[12] = { 0xF7, 0x01, 0x89, 0x00, 0x00, 0x00,
 					    0x03, 0x00, 0xDD, 0x00, 0x3A, 0x02 };
+			if (g_link_rssi[s])
+				s7b[8] = (uint8_t)g_link_rssi[s];
 			usb_tx_hid((uint8_t)s, 0x7B, s7b, sizeof(s7b));
 			s_last_7b_ms[s] = t;
 		}
