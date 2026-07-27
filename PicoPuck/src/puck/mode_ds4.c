@@ -7,22 +7,10 @@
 #include "puck/gamepad_util.h"
 #include "puck/relay.h"
 #include <string.h>
+#include "hid_reports.h"
 
 #define DS4_TOUCH_H 942
 #define DS4_STATUS_USB 0x1B
-
-static const uint8_t GYRO_HID_DESC[] = {
-	0x05, 0x01, 0x09, 0x05, 0xA1, 0x01, 0x85, 0x01, 0x09, 0x30, 0x09, 0x31,
-	0x09, 0x32, 0x09, 0x35, 0x15, 0x00, 0x25, 0x07, 0x75, 0x04, 0x95, 0x01,
-	0x81, 0x42, 0x65, 0x00, 0x05, 0x09, 0x19, 0x01, 0x29, 0x0E, 0x15, 0x00,
-	0x25, 0x01, 0x75, 0x01, 0x95, 0x0E, 0x81, 0x02, 0x06, 0x00, 0xFF, 0x09,
-	0x20, 0x75, 0x06, 0x95, 0x01, 0x15, 0x00, 0x25, 0x7F, 0x81, 0x02, 0x05,
-	0x01, 0x09, 0x33, 0x09, 0x34, 0x15, 0x00, 0x26, 0xFF, 0x00, 0x75, 0x08,
-	0x95, 0x02, 0x81, 0x02, 0x06, 0x00, 0xFF, 0x09, 0x21, 0x95, 0x36, 0x81,
-	0x02, 0x85, 0x05, 0x09, 0x22, 0x95, 0x1F, 0x91, 0x02, 0x85, 0x04, 0x09,
-	0x23, 0x95, 0x24, 0xB1, 0x02, 0x85, 0x02, 0x09, 0x24, 0x95, 0x24, 0xB1,
-	0x02, 0xC0
-};
 
 static uint16_t ds4_build(int slot, uint8_t *out, uint8_t *rid)
 {
@@ -43,17 +31,24 @@ static uint16_t ds4_build(int slot, uint8_t *out, uint8_t *rid)
 		 ((b & TB_STEAM) ? 0x01 : 0);
 	out[7] = g_in[slot].lt;
 	out[8] = g_in[slot].rt;
-	out[12] = g_in[slot].gx & 0xFF;  out[13] = g_in[slot].gx >> 8;
-	out[14] = g_in[slot].gz & 0xFF;  out[15] = g_in[slot].gz >> 8;
-	out[16] = (-g_in[slot].gy) & 0xFF; out[17] = (-g_in[slot].gy) >> 8;
-	out[18] = g_in[slot].ax & 0xFF;  out[19] = g_in[slot].ax >> 8;
-	out[20] = g_in[slot].ay & 0xFF;  out[21] = g_in[slot].ay >> 8;
-	out[22] = g_in[slot].az & 0xFF;  out[23] = g_in[slot].az >> 8;
+	out[12] = g_in[slot].gx & 0xFF;
+	out[13] = g_in[slot].gx >> 8;
+	out[14] = g_in[slot].gz & 0xFF;
+	out[15] = g_in[slot].gz >> 8;
+	out[16] = (-g_in[slot].gy) & 0xFF;
+	out[17] = (-g_in[slot].gy) >> 8;
+	out[18] = g_in[slot].ax & 0xFF;
+	out[19] = g_in[slot].ax >> 8;
+	out[20] = g_in[slot].ay & 0xFF;
+	out[21] = g_in[slot].ay >> 8;
+	out[22] = g_in[slot].az & 0xFF;
+	out[23] = g_in[slot].az >> 8;
 	out[29] = DS4_STATUS_USB;
 	if (lt_touch || rt_touch) {
 		uint16_t lx, ly, rx, ry;
-		steam_pads_to_touch(b, DS4_TOUCH_H, g_in[slot].lpx, g_in[slot].lpy,
-				    g_in[slot].rpx, g_in[slot].rpy, &lx, &ly, &rx, &ry);
+		steam_pads_to_touch(b, DS4_TOUCH_H, g_in[slot].lpx,
+				    g_in[slot].lpy, g_in[slot].rpx,
+				    g_in[slot].rpy, &lx, &ly, &rx, &ry);
 		static uint8_t tstamp;
 		out[32] = 1;
 		out[33] = tstamp++;
@@ -71,22 +66,28 @@ static uint16_t ds4_get(int slot, uint8_t rid, uint8_t type, uint8_t *buf,
 	if (type != PP_HID_FEATURE || reqlen == 0)
 		return 0;
 	memset(buf, 0, reqlen);
-	uint8_t mac[6] = { 0x00, 0x1B, 0xDC, 0x4F, 0x55, (uint8_t)(0x50 + slot) };
+	uint8_t mac[6] = {
+		0x00, 0x1B, 0xDC, 0x4F, 0x55, (uint8_t)(0x50 + slot)
+	};
 	switch (rid) {
 	case 0x02:
-		if (reqlen < 36) return 0;
+		if (reqlen < 36)
+			return 0;
 		ps_neutral_calib(buf);
 		return 36;
 	case 0x12:
-		if (reqlen < 15) return 0;
+		if (reqlen < 15)
+			return 0;
 		memcpy(buf, mac, 6);
 		return 15;
 	case 0x81:
-		if (reqlen < 6) return 0;
+		if (reqlen < 6)
+			return 0;
 		memcpy(buf, mac, 6);
 		return 6;
 	case 0xA3:
-		if (reqlen < 48) return 0;
+		if (reqlen < 48)
+			return 0;
 		buf[0] = 0x01;
 		return 48;
 	default:
@@ -104,10 +105,13 @@ static void ds4_set(int slot, uint8_t rid, uint8_t type, const uint8_t *b,
 	const uint8_t *p;
 	uint16_t pn;
 	if (rid == 0) {
-		if (n < 1 || b[0] != 0x05) return;
-		p = b + 1; pn = (uint16_t)(n - 1);
+		if (n < 1 || b[0] != 0x05)
+			return;
+		p = b + 1;
+		pn = (uint16_t)(n - 1);
 	} else if (rid == 0x05) {
-		p = b; pn = n;
+		p = b;
+		pn = n;
 	} else {
 		return;
 	}
@@ -117,7 +121,9 @@ static void ds4_set(int slot, uint8_t rid, uint8_t type, const uint8_t *b,
 }
 
 const emu_mode_t emu_ds4 = {
-	.vid = 0x054C, .pid = 0x05C4, .bcd = 0x0120,
+	.vid = 0x054C,
+	.pid = 0x05C4,
+	.bcd = 0x0120,
 	.product = "Wireless Controller",
 	.report_desc = GYRO_HID_DESC,
 	.report_desc_len = sizeof(GYRO_HID_DESC),

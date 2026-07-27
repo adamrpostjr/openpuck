@@ -6,49 +6,9 @@
 //   [0]=0x45 [1]=seq [2..5]=buttons u32; analog offsets below are from the buttons low byte (rep[2]).
 #pragma once
 #include <stdint.h>
-
-// ---- Triton button masks (the 32-bit field at rep[2..5]) ----
-#define TB_A 0x1u
-#define TB_B 0x2u
-#define TB_X 0x4u
-#define TB_Y 0x8u
-#define TB_QAM 0x10u
-#define TB_R3 0x20u
-#define TB_VIEW 0x40u
-#define TB_R4 0x80u
-#define TB_R5 0x100u
-#define TB_RB 0x200u
-#define TB_DDN 0x400u
-#define TB_DRT 0x800u
-#define TB_DLF 0x1000u
-#define TB_DUP 0x2000u
-#define TB_MENU 0x4000u
-#define TB_L3 0x8000u
-#define TB_STEAM 0x10000u
-#define TB_L4 0x20000u
-#define TB_L5 0x40000u
-#define TB_LB 0x80000u
-#define TB_RPADT 0x200000u
-#define TB_RPADC 0x400000u
-#define TB_LPADT 0x2000000u
-#define TB_LPADC 0x4000000u
-// Trigger full-pull / click bits (the controller sets these at a full ZL/ZR pull; also the target of a back-
-// paddle / QAM remap to LT/RT). psShouldersByte / the Switch builders already read these as L2/R2 / ZL/ZR.
-#define TB_R2 0x800000u
-#define TB_L2 0x8000000u
-
-// Virtual PS targets, settable ONLY via a back-paddle/QAM remap (psOrBackCode / tritonFromCode), never by the
-// controller itself. They live on bits 30/31 -- the only bits the SC2 0x45 report does NOT use (see PROTOCOL.md
-// §8.1; bits 0..29 are all real). They originally aliased 0x00100000 (right stick touch) and 0x01000000 (left
-// stick touch), so merely RESTING a thumb on a capacitive stick fired the DualSense trackpad-click / mute.
-#define TB_TOUCH 0x40000000u // PS touchpad click
-#define TB_MUTE 0x80000000u // PS5 mute
-
-// all four back paddles held -> mode-switch chord guard
-#define CHORD_BACK4 (TB_R4 | TB_L4 | TB_R5 | TB_L5)
-
-// analog-trigger fraction (of 0xFF) at which digital ZL/ZR (Switch) etc. trip
-#define SW_TRIG_ON 40
+// Triton button masks (TB_*), SW_TRIG_ON and CHORD_BACK4 are the canonicalization
+// contract shared byte-for-byte with PicoPuck — one source of truth.
+#include "src/common/triton_masks.h"
 
 // ---- report 0x45 field decoders (offsets relative to rep[2], the buttons low byte) ----
 static inline int s16off(const uint8_t *r, int off)

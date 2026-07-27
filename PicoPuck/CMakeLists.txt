@@ -65,11 +65,14 @@ target_sources(picopuck PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/bt/drv_xinput.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/bt/drv_sc2.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/bt/drv_ds4.c
+    # Shared source of truth, compiled by BOTH firmwares (see ../OpenPuck/src/common).
+    ${CMAKE_CURRENT_SOURCE_DIR}/../OpenPuck/src/common/hid_reports.c
 )
 
 target_include_directories(picopuck PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/src/config
+    ${CMAKE_CURRENT_SOURCE_DIR}/../OpenPuck/src/common
 )
 
 target_compile_definitions(picopuck PRIVATE

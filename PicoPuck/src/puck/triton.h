@@ -11,46 +11,16 @@
 
 #include <stdint.h>
 #include "config/picopuck_config.h"
-
-// Triton button masks (the 32-bit field at report 0x45 bytes [2..5]).
-#define TB_A 0x1u
-#define TB_B 0x2u
-#define TB_X 0x4u
-#define TB_Y 0x8u
-#define TB_QAM 0x10u
-#define TB_R3 0x20u
-#define TB_VIEW 0x40u
-#define TB_R4 0x80u
-#define TB_R5 0x100u
-#define TB_RB 0x200u
-#define TB_DDN 0x400u
-#define TB_DRT 0x800u
-#define TB_DLF 0x1000u
-#define TB_DUP 0x2000u
-#define TB_MENU 0x4000u
-#define TB_L3 0x8000u
-#define TB_STEAM 0x10000u
-#define TB_L4 0x20000u
-#define TB_L5 0x40000u
-#define TB_LB 0x80000u
-#define TB_RPADT 0x200000u
-#define TB_RPADC 0x400000u
-#define TB_LPADT 0x2000000u
-#define TB_LPADC 0x4000000u
-#define TB_R2 0x800000u
-#define TB_L2 0x8000000u
-// Virtual PS targets (remap-only; bits the SC2 0x45 report never uses).
-#define TB_TOUCH 0x40000000u  // PS touchpad click
-#define TB_MUTE 0x80000000u   // PS5 mute
+#include "triton_masks.h" // shared TB_* button masks + SW_TRIG_ON + CHORD_BACK4
 
 // Decoded controller input, one per slot.
 typedef struct {
-	uint32_t buttons;             // TB_* bits
-	int16_t lx, ly, rx, ry;       // sticks, center 0
-	uint8_t lt, rt;               // triggers 0..255
-	int16_t lpx, lpy, rpx, rpy;   // trackpads (SC2 only; 0 for generic pads)
-	int16_t ax, ay, az;           // accelerometer (0 if none)
-	int16_t gx, gy, gz;           // gyroscope (0 if none)
+	uint32_t buttons; // TB_* bits
+	int16_t lx, ly, rx, ry; // sticks, center 0
+	uint8_t lt, rt; // triggers 0..255
+	int16_t lpx, lpy, rpx, rpy; // trackpads (SC2 only; 0 for generic pads)
+	int16_t ax, ay, az; // accelerometer (0 if none)
+	int16_t gx, gy, gz; // gyroscope (0 if none)
 } puck_input_t;
 
 extern puck_input_t g_in[PP_NSLOT];
