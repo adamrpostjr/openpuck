@@ -69,14 +69,16 @@ re-add wake mouse + `g_active->mountSlots(k)` + WebUSB in locked instance order,
 ## 2. Configuration & identity
 
 ### `config.cpp` / `config.h` — persisted settings (loop task)
-- **Owns**: `g_usbMode`, `g_xbox`, `g_chordBtn[3]`, `g_persistMode`, `g_bootMode`,
+- **Owns**: `g_usbMode`, `g_xbox`, `g_chordBtn[3]`, `g_chordDpad[4]`, `g_persistMode`, `g_bootMode`,
   `g_debugCdcThisBoot`, `g_mDiv`, `g_mFric`, `g_type[ET_COUNT]` (per-emulated-type
   button config), `g_etype`, live mirrors `g_abSwap`/`g_back[4]`/`g_qamMap`/
   `g_padHaptics`/`g_ledBright`, `g_rumbleScale`, `g_swProRate`, `g_swGyroScale10`,
   and the constant `g_pollUs = 4000` (250 Hz, **fixed**).
-- `struct Cfg` is serialized to `/cfg.bin` (LittleFS), magic `0xCD`. `rxWin10`,
-  `hapticBlockOn`, `hapticBlockS` and the per-type table travel with it; `rsvd0` is the
-  one-shot debug-CDC arm.
+- `struct Cfg` is serialized to `/cfg.bin` (LittleFS), magic `0xCF`. `rxWin10`,
+  `lizKeep`, `landAll87` and the per-type table travel with it; `rsvd0` is the
+  one-shot debug-CDC arm. New fields are **appended to the tail** (`chordDpad[4]`) —
+  `loadCfg()` prefills `0xFF` and accepts a file short by only the tail (`CFG_LEN_MIN`),
+  so an upgrade keeps every existing setting and unwritten tail bytes fall back to defaults.
 - `loadCfg()` resolves the boot mode policy: one-shot `bootMode` wins once then clears;
   else `persistMode ? last mode : STEAM(0)`. Calls `applyActiveType()`.
 - `saveCfg`, `saveMode`, `armDebugCdcNextBoot`, `factoryErase` (LittleFS `format()`),
@@ -148,7 +150,7 @@ The "dongle" role. All driven synchronously from `rfLinkTask()` in `loop()`.
   samples RSSI, updates `g_connReplyMs`/`g_linkRssi`, calls `hapticOnReconnect` on a
   gap, and **decodes the 0x45 input report into `g_in[g_curSlot]`** (buttons, sticks,
   triggers, trackpads, IMU). Also handles: Steam-button short-press remote wakeup,
-  Steam+Y 2 s power-off chord, back-4 mode-switch chord (`saveMode` + `NVIC_SystemReset`),
+  Steam+Y 2 s power-off chord, back-4 mode-switch chord (face + D-pad, `saveMode` + `NVIC_SystemReset`),
   and status reports 0x43 (battery → `g_battery`/`g_batteryState`) / 0x44 → dispatched
   via `g_active->onAuxReport`.
 - **`g_curSlot`** — the slot the poll loop is currently driving. Set by `rfConnStep`

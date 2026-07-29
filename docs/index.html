@@ -166,11 +166,21 @@
     </div>
 
     <div class="card">
-      <h2>Back4 + face button chords</h2>
-      <p class="note" style="margin-top:0">Hold all four back paddles (L4+R4+L5+R5) plus a face button to switch mode without the WebUI. <strong>A is always Steam.</strong> B / X / Y are configurable below (defaults: B=Lizard, X=Xbox, Y=Switch HORIPAD).</p>
-      <div class="row"><label>B + back4 →</label><select class="chord" data-i="0"></select></div>
-      <div class="row"><label>X + back4 →</label><select class="chord" data-i="1"></select></div>
-      <div class="row"><label>Y + back4 →</label><select class="chord" data-i="2"></select></div>
+      <h2>Back4 chords (face + D-pad)</h2>
+      <p class="note" style="margin-top:0">Hold all four back paddles (L4+R4+L5+R5) plus a face button or D-pad direction to switch mode without the WebUI. <strong>A is always Steam</strong> — that is the way back out of any mode. B / X / Y and all four D-pad directions are configurable below (defaults: B=Lizard, X=Xbox, Y=Switch Pro).</p>
+      <div class="row"><label>back4 + B</label><select class="chord" data-i="0"></select></div>
+      <div class="row"><label>back4 + X</label><select class="chord" data-i="1"></select></div>
+      <div class="row"><label>back4 + Y</label><select class="chord" data-i="2"></select></div>
+      <!-- D-pad chords (firmware >= v18). Unlike the face selects these offer the game/clean modes too: those
+           modes have no WebUSB interface, so a chord is the only way IN, and back4+A is always the way out.
+           Older firmware has no D-pad chords at all -> the whole block hides (see #dpadChords in applyBlob). -->
+      <div id="dpadChords" class="hide">
+        <div class="row"><label>back4 + Left</label><select class="chordD" data-i="0"></select></div>
+        <div class="row"><label>back4 + Up</label><select class="chordD" data-i="1"></select></div>
+        <div class="row"><label>back4 + Right</label><select class="chordD" data-i="2"></select></div>
+        <div class="row"><label>back4 + Down</label><select class="chordD" data-i="3"></select></div>
+      </div>
+      <p id="dpadOld" class="note hide">This puck's firmware predates the D-pad chords — update it to configure them.</p>
     </div>
 
     <div class="card wide">
@@ -370,7 +380,9 @@
 
 <script>
 const MODE_NAMES = ["Steam (puck)","Xbox 360","Switch (HORIPAD)","Lizard (always)","Switch Pro + gyro","PS5 DualSense","HID gyro (DS4)","PS5 (game/clean)","DS4 (game/clean)","PS3 (DualShock 3)"];
-const CHORD_FIELD = [17, 18, 19];
+const CHORD_FIELD = [17, 18, 19];          // back4 + B/X/Y
+const CHORD_DPAD_FIELD = [34, 35, 36, 37]; // back4 + D-pad left/up/right/down (firmware protocol >= 18)
+const CHORD_DPAD_DEF = [9, 8, 7, 2];       // firmware defaults: PS3, DS4 game, PS5 game, Switch HORIPAD
 let dev=null, epIn=0, epOut=0, ifNum=0, polling=false, capturing=false, backupBusy=false;
 // A ReversePuck CONTROLLER dongle (28DE:1302) speaks a REDUCED subset of this protocol: no status blob /
 // lizard / config, just a paired-pucks list (0xAC) plus the identical firmware-update + DFU ops. When true,
@@ -644,6 +656,12 @@ for(const sel of document.querySelectorAll("select.chord")){
   MODE_NAMES.forEach((n,i)=>{ if(i===7||i===8) return;
     const o=document.createElement("option"); o.value=i; o.textContent=n; sel.appendChild(o); });
 }
+// D-pad chords offer EVERY mode, including the game/clean ones the face selects skip: those modes drop WebUSB,
+// so a chord is the only way into them, and back4+A still gets you back to Steam.
+for(const sel of document.querySelectorAll("select.chordD")){
+  MODE_NAMES.forEach((n,i)=>{
+    const o=document.createElement("option"); o.value=i; o.textContent=n; sel.appendChild(o); });
+}
 { const sel=document.getElementById("swRate");
   for(const [lbl,v] of [["Full rate (~250 Hz, default)",2],["120 Hz",1],["66 Hz (compatibility)",0]]){
     const o=document.createElement("option"); o.value=v; o.textContent=lbl; sel.appendChild(o); }
@@ -795,7 +813,7 @@ async function readFrame(marker, minLen, readLen){
   try{
     // largest frame (status blob) spans multiple USB-FS packets; read generously to capture it in one call.
     // readLen is overridable: the dongle's 0xAC paired-pucks list reaches 213 B (8 pucks) and needs 256.
-    const r = await dev.transferIn(epIn, readLen||192);
+    const r = await dev.transferIn(epIn, readLen||256);
     if(r.status!=="ok"||r.data.byteLength<2) return null;
     const d=new Uint8Array(r.data.buffer);
     // Live wedge reporter (0xA9): emitted from the firmware's SOF callback (usbd task) while loop() is stalled --
@@ -826,6 +844,9 @@ function applyBlob(p){
   const slot=p[10], up=p[11], f1=(p[12]|(p[13]<<8));
   const newps=(p.length>16?(p[15]|(p[16]<<8)):0), persistMode=(p.length>22?p[22]:0);
   const chord=(p.length>25)?[p[23],p[24],p[25]]:[3,1,4];
+  // D-pad chords land at the tail of the v18 payload (firmware p[182..185] = payload p[180..183]).
+  const dpadCap=(p[0]>=18 && p.length>183);
+  const chordD=dpadCap?[p[180],p[181],p[182],p[183]]:CHORD_DPAD_DEF;
   const polls=(p.length>27?(p[26]|(p[27]<<8)):0);
   const loopUs=(p.length>29?(p[28]|(p[29]<<8)):0);
   const worstIdx=(p.length>30?p[30]:0), worstUs=(p.length>32?(p[31]|(p[32]<<8)):0);
@@ -1053,6 +1074,9 @@ function applyBlob(p){
   { const sel=$("#swRate"); if(document.activeElement!==sel) sel.value=swProRate; }
   { const sel=$("#swGyro"); if(document.activeElement!==sel) sel.value=swGyro10; }
   for(const sel of document.querySelectorAll("select.chord")){ if(document.activeElement!==sel) sel.value=chord[+sel.dataset.i]; }
+  $("#dpadChords").classList.toggle("hide", !dpadCap);
+  $("#dpadOld").classList.toggle("hide", dpadCap);
+  if(dpadCap) for(const sel of document.querySelectorAll("select.chordD")){ if(document.activeElement!==sel) sel.value=chordD[+sel.dataset.i]; }
 }
 function fmtSlider(id,v){ return id==="rumble" ? v+"%" : id==="hapBlockS" ? v+" s" : ""+v; }
 function setSlider(id,v){ const el=$("#"+id); if(document.activeElement!==el){ el.value=v; } $("#"+id+"V").textContent=fmtSlider(id,el.value); }
@@ -1148,6 +1172,9 @@ function buildBackup(p, bp){
     types.push({back:[p[q],p[q+1],p[q+2],p[q+3]], qam:p[q+4], abSwap:p[q+5], pad:p[q+6], led:p[q+7], rumble:p[q+8]}); }
   const cfg={ mode:p[1], mDiv:p[2], mFric:p[3], persistMode:p[22], chord:[p[23],p[24],p[25]],
               rumble:p[51], swProRate:p[52], swGyro10:p[53], types };
+  // D-pad chords only exist from protocol v18; omit the key entirely on older pucks so a restore doesn't
+  // replay defaults over a newer puck's real settings.
+  if(p[0]>=18 && p.length>183) cfg.chordD=[p[180],p[181],p[182],p[183]];
   // version 2: include the lizard map so it survives a backup/restore cycle.
   // Guard on !lizardBusy to avoid a race with the one-shot lazy load (lizardExchange sets
   // lizardBusy while the initial 0x11 fetch is in flight); if the load is still pending the
@@ -1194,11 +1221,11 @@ async function importBackup(file){
   // driven while the import replays every setting onto the puck, then closes on Done / on error.
   modalOpen("Restore backup");
   const c=obj.config;
-  // Pre-count every write so the bar tracks real progress: settings (9 base fields), per-type config
-  // (9 each), the lizard bindings, 4 bond slots, and the final commit.
+  // Pre-count every write so the bar tracks real progress: settings (9 base fields + 4 D-pad chords when the
+  // backup carries them), per-type config (9 each), the lizard bindings, 4 bond slots, and the final commit.
   const typeN=Array.isArray(c.types)?Math.min(c.types.length,4):0;
   const lizardN=(Array.isArray(c.lizardMap) && lizardCapable())?Math.min(c.lizardMap.length,LZ_MAX):0;
-  const total=9 + typeN*9 + lizardN + 4 + 1;
+  const total=9 + (Array.isArray(c.chordD)?4:0) + typeN*9 + lizardN + 4 + 1;
   let step=0, stage="";
   const tick=()=>modalStage(stage, Math.min(99,Math.floor(step*100/total)));
   try{
@@ -1222,6 +1249,8 @@ async function importBackup(file){
     stage="Restoring settings"; tick();
     await sf(1,c.mDiv); await sf(2,c.mFric); await sf(22,c.rumble); await sf(16,c.persistMode?1:0);
     await sf(17,c.chord[0]); await sf(18,c.chord[1]); await sf(19,c.chord[2]);
+    // absent in backups taken before the D-pad chords existed (or from a pre-v18 puck) -- skip, don't default
+    if(Array.isArray(c.chordD)) for(let i=0;i<4;i++) await sf(CHORD_DPAD_FIELD[i], c.chordD[i]);
     await sf(23,c.swProRate); await sf(24,c.swGyro10);
     // c.types is absent in some very old backups created before per-type paddle/haptic config
     // was added to the panel export; guard so a missing field never crashes the import mid-flight.
@@ -2149,10 +2178,13 @@ $("#swGyro").addEventListener("change", ()=>setField(24, +$("#swGyro").value));
 for(const sel of document.querySelectorAll("select.chord")){
   sel.addEventListener("change", ()=>setField(CHORD_FIELD[+sel.dataset.i], +sel.value));
 }
+for(const sel of document.querySelectorAll("select.chordD")){
+  sel.addEventListener("change", ()=>setField(CHORD_DPAD_FIELD[+sel.dataset.i], +sel.value));
+}
 for(const b of document.querySelectorAll(".modebtn")){
   b.onclick=()=>{ const m=+b.dataset.mode;
     const clean=(m===7||m===8||m===9);
-    const msg="Switch to "+MODE_NAMES[m]+"? The copycat will reboot."+(clean?"\n\nNOTE: the game/clean PlayStation modes (and PS3) drop WebUSB + host-wake, so THIS PANEL WILL DISCONNECT and can't reach the device while it's in this mode. To get back, chord on the controller: hold back-paddle 4 + A to return to Steam mode.":"");
+    const msg="Switch to "+MODE_NAMES[m]+"? The copycat will reboot."+(clean?"\n\nNOTE: the game/clean PlayStation modes (and PS3) drop WebUSB + host-wake, so THIS PANEL WILL DISCONNECT and can't reach the device while it's in this mode. To get back, chord on the controller: hold all four back paddles (L4+R4+L5+R5) + A to return to Steam mode. The back4+D-pad chords are how you get back INTO these modes without the panel — check their assignments in the chords card first.":"");
     if(confirm(msg)){ send([0x03, m]); log("mode switch requested — device will reboot"); } };
 }
 updateUf2UI();

@@ -4,6 +4,7 @@
 #include <Adafruit_LittleFS.h>
 #include <InternalFileSystem.h>
 #include <string.h>
+#include <stddef.h> // offsetof (CFG_LEN_MIN, the short-file accept threshold)
 using namespace Adafruit_LittleFS_Namespace;
 
 uint8_t g_usbMode = 0;
@@ -11,6 +12,11 @@ bool g_xbox = false;
 uint8_t g_chordBtn[3] = {
 	MODE_LIZARD, MODE_XBOX, MODE_SW_PRO
 }; // back4+B/X/Y -> these modes (A always STEAM); Y defaults to Switch Pro
+// back4+D-pad (left/up/right/down). Defaults are the console personalities that ship WITHOUT a config
+// interface -- those modes can't be entered from the panel-less side any other way, and back4+A still returns
+// to Steam. Configurable like g_chordBtn (WebUSB fields 34..37).
+uint8_t g_chordDpad[4] = { MODE_PS3, MODE_DS4_GAME, MODE_PS5_GAME,
+			   MODE_SW_HORI };
 bool g_persistMode = false;
 uint8_t g_bootMode = 0xFF;
 
@@ -86,7 +92,15 @@ struct Cfg {
 	// haptics.h LIZKEEP_MS). landAll87: the verbatim-0x87-relay experiment toggle (haptics.h g_landAll87).
 	uint8_t rxWin10, lizKeep, landAll87;
 	TypeCfg type[ET_COUNT]; // per-emulated-type back/qam/abSwap/padHaptics
+	// TAIL (appended after CFG_MAGIC 0xCF shipped): back4+D-pad mode assignments. New tail fields go HERE, at
+	// the end, and loadCfg accepts a short file so an upgrade keeps every existing setting -- see CFG_LEN_MIN.
+	uint8_t chordDpad[4];
 }; // rsvd0 = ex-padSmooth, now the one-shot debug-CDC arm
+
+// Shortest cfg.bin we still accept: the layout as of CFG_MAGIC 0xCF, i.e. everything before the appended tail.
+// A file that stops anywhere in the tail leaves those bytes at the 0xFF prefill loadCfg() applies, which every
+// tail field treats as "unset" and replaces with its default.
+#define CFG_LEN_MIN (offsetof(struct Cfg, chordDpad))
 
 void saveCfg()
 {
@@ -103,7 +117,9 @@ void saveCfg()
 		  (uint8_t)(g_rxWin / 10),
 		  g_lizKeep,
 		  g_landAll87,
-		  {} };
+		  {},
+		  { g_chordDpad[0], g_chordDpad[1], g_chordDpad[2],
+		    g_chordDpad[3] } };
 	for (int i = 0; i < ET_COUNT; i++)
 		c.type[i] = g_type[i];
 	InternalFS.remove(CFG_FILE);
@@ -117,11 +133,17 @@ void saveCfg()
 void loadCfg()
 {
 	Cfg c;
+	// 0xFF prefill: bytes a SHORT (pre-tail) cfg.bin never wrote stay 0xFF, which is not a valid mode/flag, so
+	// each tail field below falls back to its compiled default instead of reading whatever was on the stack.
+	memset(&c, 0xFF, sizeof c);
 	File f(InternalFS);
 	bool consume = false;
 	if (f.open(CFG_FILE, FILE_O_READ)) {
-		if (f.read((uint8_t *)&c, sizeof c) == (int)sizeof c &&
-		    c.magic == CFG_MAGIC) {
+		int got = f.read((uint8_t *)&c, sizeof c);
+		// Accept a file that is short only in the appended tail (>= CFG_LEN_MIN): an upgrade from a build
+		// predating the tail keeps mode/paddles/chords instead of silently reverting to factory defaults.
+		// Anything shorter, or a stale magic, is a real layout change -> discard and use defaults.
+		if (got >= (int)CFG_LEN_MIN && c.magic == CFG_MAGIC) {
 			g_mDiv = c.mDiv ? c.mDiv : 64;
 			g_mFric = c.mFric;
 			for (int i = 0; i < ET_COUNT; i++)
@@ -154,6 +176,13 @@ void loadCfg()
 				g_chordBtn[i] = modeValid(c.chordBtn[i]) ?
 							c.chordBtn[i] :
 							CHORD_DEF[i];
+			// D-pad chords: 0xFF (short pre-tail file) or any invalid mode keeps the compiled default.
+			for (int i = 0; i < 4; i++)
+				if (modeValid(c.chordDpad[i]))
+					g_chordDpad[i] = c.chordDpad[i];
+			// grow a short file to the current layout on the next save
+			if (got < (int)sizeof c)
+				consume = true;
 
 			// 0 is a valid setting (rumble off)
 			g_rumbleScale = c.rumbleScale;

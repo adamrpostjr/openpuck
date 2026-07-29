@@ -55,7 +55,8 @@ static void fwupAckPost(uint8_t status)
 //                [v13: per-slot link stats, 4x9B from p[145]: {pollsps u16, f1ps u16, newps u16, crc/s u8,
 //                 noRx/s u8, relay/s u8} -- each controller's own rates (the v4 aggregates are their sums)]
 //                [v14/v17: p[181] landAll87 (verbatim-0x87-relay experiment toggle)]
-#define WB_PAYLEN 180
+//                [v18: p[182..185] chordDpad left/up/right/down (back4+D-pad mode assignments)]
+#define WB_PAYLEN 184
 // The blob send is drop-on-full (never blocks loop), so the vendor TX FIFO MUST be able to hold a whole blob
 // -- otherwise tud_vendor_write_available() never reaches the frame size and EVERY frame is dropped (blank
 // panel / stale mappings). The Makefile sets -DCFG_TUD_VENDOR_TX_BUFSIZE=256; guard it here so a build without
@@ -80,13 +81,14 @@ static void webusbSendBlob()
 	p[0] = 0xA5;
 	p[1] = WB_PAYLEN;
 
-	// protocol version (17 = per-type rumble field (TypeCfg k=8), per-type stride 8->9; 16 = +configurable
+	// protocol version (18 = +configurable back4+D-pad chords (fields 34..37, blob p[182..185]);
+	// 17 = per-type rumble field (TypeCfg k=8), per-type stride 8->9; 16 = +configurable
 	// lizard-map ops 0x11..0x15 / 0xAA frame, payload unchanged -- the panel MUST see >=16 before it dares
 	// send 0x11, or a blocking readLizard() would hang forever against a firmware that silently drops the
 	// unknown op; 15 = +staged firmware-update ops 0x20..0x24; 14 = +landAll87 toggle; 13 = +per-slot link
 	// stats; 12 = +relay rate + clock fingerprint; 11 = +reset cause; 10 = +ledBright per type; 9 = +per-type
 	// cfg; 8 = +per-slot link status; 7 = +raw accel; 6 = +swPro120/gyroScale)
-	p[2] = 17;
+	p[2] = 18;
 	p[3] = g_usbMode;
 	p[4] = (uint8_t)g_mDiv;
 	p[5] = (uint8_t)g_mFric;
@@ -255,6 +257,11 @@ static void webusbSendBlob()
 	}
 	// v14/v17: verbatim-0x87-relay experiment toggle (panel reflects + toggles it)
 	p[181] = g_landAll87;
+	// v18: back4+D-pad mode assignments (panel renders these as selects next to the B/X/Y ones)
+	p[182] = g_chordDpad[CHD_LEFT];
+	p[183] = g_chordDpad[CHD_UP];
+	p[184] = g_chordDpad[CHD_RIGHT];
+	p[185] = g_chordDpad[CHD_DOWN];
 	// CRITICAL: usb_web.write() SPINS (`while (remain && _connected) yield();`) until the IN FIFO drains or the
 	// panel disconnects. If the panel holds the WebUSB interface open but stops reading its IN endpoint -- a
 	// backgrounded tab, or the host briefly not servicing transferIn under load -- the FIFO never empties and
@@ -923,6 +930,15 @@ void webusbPoll()
 				case 19:
 					if (modeValid(v))
 						g_chordBtn[f - 17] = v;
+					break;
+
+				// back4+D-pad mode assignments (left/up/right/down), protocol v18
+				case 34:
+				case 35:
+				case 36:
+				case 37:
+					if (modeValid(v))
+						g_chordDpad[f - 34] = v;
 					break;
 
 				// reboot once WITH the CDC serial console (puck mode), then auto-revert
