@@ -72,9 +72,6 @@ void applyActiveType()
 	g_rumble = t.rumble;
 	g_ledBright = t.ledBright;
 }
-// rumble strength % (200 = double); adjustable from the WebUSB panel
-uint8_t g_rumbleScale = 200;
-
 // poll rate defaults to POLL_US_DEFAULT (250 Hz), matching the real Valve puck (see config.h). The
 // delivered report rate equals the poll rate (fresh IMU in every reply). Live-adjustable via console
 // "PR<hz>" for on-HW sweeps; session-only, so any rate persisted by an older build is ignored and boot
@@ -87,7 +84,9 @@ uint32_t g_pollUs = POLL_US_DEFAULT;
 #define CFG_MAGIC 0xCF
 struct Cfg {
 	uint8_t magic, mode, mDiv, mFric, rsvd0, pollU100, persistMode,
-		bootMode, chordBtn[3], rumbleScale;
+		bootMode, chordBtn[3], rsvd1;
+	// rsvd1: legacy rumble-strength slot (strength now fixed at RUMBLE_SCALE_PCT; ignored -- kept so the
+	// on-flash layout is unchanged and an existing cfg.bin still loads).
 	// rxWin10: legacy RF tunable slot (window now fixed; ignored). lizKeep: the id9=0 hold enable (see
 	// haptics.h LIZKEEP_MS). landAll87: the verbatim-0x87-relay experiment toggle (haptics.h g_landAll87).
 	uint8_t rxWin10, lizKeep, landAll87;
@@ -113,7 +112,7 @@ void saveCfg()
 		  (uint8_t)(g_persistMode ? 1 : 0),
 		  g_bootMode,
 		  { g_chordBtn[0], g_chordBtn[1], g_chordBtn[2] },
-		  g_rumbleScale,
+		  0, // rsvd1 (ex rumble strength)
 		  (uint8_t)(g_rxWin / 10),
 		  g_lizKeep,
 		  g_landAll87,
@@ -184,8 +183,6 @@ void loadCfg()
 			if (got < (int)sizeof c)
 				consume = true;
 
-			// 0 is a valid setting (rumble off)
-			g_rumbleScale = c.rumbleScale;
 			// lizard-suppression keepalive enable (0/1; anything else = a pre-0xCE cfg leaked
 			// through -> keep the on default)
 			if (c.lizKeep <= 1)

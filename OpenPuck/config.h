@@ -156,16 +156,12 @@ extern uint8_t g_ledBright;
 
 // Copy g_type[g_etype] into the live mirrors above (safe defaults when g_etype == ET_NONE).
 void applyActiveType();
-// rumble strength, percent of decoded amplitude (100 = 1x, 200 = 2x default), all modes
-extern uint8_t g_rumbleScale;
-// Switch Pro motion settings. Persisted in their OWN flash file (mode_switch_pro.cpp), NOT in Cfg -- so changing
-// them never resets the rest of the config. Set from the WebUSB panel.
-// Switch Pro report cadence: 0 = 66Hz (15ms, compat), 1 = 120Hz (8ms, DEFAULT), 2 = full (~250Hz)
-extern uint8_t g_swProRate;
-// Switch Pro gyro sensitivity x10 (10 = 1.0x default; 5/15/20/25/30 = 0.5..3.0x)
-extern uint8_t g_swGyroScale10;
+// Switch Pro motion setting. Persisted in its OWN flash file (mode_switch_pro.cpp), NOT in Cfg -- so changing
+// it never resets the rest of the config. Set from the WebUSB panel.
+// Switch Pro gyro mapping: 0 = corrected (default, PR #189 sensitivity trim), 1 = legacy (raw, pre-#189)
+extern uint8_t g_swGyroLegacy;
 
-// persist g_swProRate + g_swGyroScale10 to their flash file
+// persist g_swGyroLegacy to its flash file
 void swProSaveCfg();
 
 // RF poll cadence: 250 Hz (4000 us) -- matches the real Valve puck's rate. The controller does NOT stream

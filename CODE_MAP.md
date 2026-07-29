@@ -72,11 +72,12 @@ re-add wake mouse + `g_active->mountSlots(k)` + WebUSB in locked instance order,
 - **Owns**: `g_usbMode`, `g_xbox`, `g_chordBtn[3]`, `g_chordDpad[4]`, `g_persistMode`, `g_bootMode`,
   `g_debugCdcThisBoot`, `g_mDiv`, `g_mFric`, `g_type[ET_COUNT]` (per-emulated-type
   button config), `g_etype`, live mirrors `g_abSwap`/`g_back[4]`/`g_qamMap`/
-  `g_padHaptics`/`g_ledBright`, `g_rumbleScale`, `g_swProRate`, `g_swGyroScale10`,
-  and the constant `g_pollUs = 4000` (250 Hz, **fixed**).
+  `g_padHaptics`/`g_ledBright`, and the constant `g_pollUs = 4000` (250 Hz, **fixed**).
+  (`g_swGyroLegacy` is declared here but lives in `mode_switch_pro.cpp`/`swprocfg.bin`.)
 - `struct Cfg` is serialized to `/cfg.bin` (LittleFS), magic `0xCF`. `rxWin10`,
   `lizKeep`, `landAll87` and the per-type table travel with it; `rsvd0` is the
-  one-shot debug-CDC arm. New fields are **appended to the tail** (`chordDpad[4]`) —
+  one-shot debug-CDC arm and `rsvd1` the ex-rumble-strength slot (both kept so the
+  on-flash layout is unchanged). New fields are **appended to the tail** (`chordDpad[4]`) —
   `loadCfg()` prefills `0xFF` and accepts a file short by only the tail (`CFG_LEN_MIN`),
   so an upgrade keeps every existing setting and unwritten tail bytes fall back to defaults.
 - `loadCfg()` resolves the boot mode policy: one-shot `bootMode` wins once then clears;
@@ -309,7 +310,8 @@ JC_SETCB[s])`).
   + `sendReport(0x30, p, 63)`.
 - **Buffers**: `JC_REPLEN = 63` (all input/reply reports are 63 payload bytes);
   reply ring `g_jcQ[NSLOT][8]` of `{rid, data[63]}`; `g_userCal[NSLOT][0x100]`;
-  `g_spiStickCal[18]`; `g_jcMac[NSLOT][6]`; config files `b[3]`.
+  `g_spiStickCal[18]`; `g_jcMac[NSLOT][6]`; config file `b[2]` (`swprocfg.bin` v2 =
+  `[ver][g_swGyroLegacy]`; the report rate is fixed at `USB_STREAM_MS`).
 - **Cross-task shared data**:
   - Reply ring `g_jcQ` / `g_jcQh` / `g_jcQt` — SPSC (usbd produces, loop consumes);
     head/tail `volatile`, ring body **not** volatile.
@@ -378,7 +380,7 @@ Reads `g_qamMap`/`g_abSwap`/`g_back[]`. Pure transforms, no buffers beyond calle
 - `g_testHaptic`, `g_hapticStop` (`volatile`), `g_hapticBlockOn`, `g_hapticBlockMs`,
   `g_hapticBlockUntil[NSLOT]`, `g_relayOp`, `g_relaySub`.
 - `hapticSendShutdown()` — bursts 0x9F "off!" (`{6f 66 66 21}`) ×3 broadcast.
-- `hapticSteamRumble(low, high, slot)` — builds a 9-byte 0x80 report (×`g_rumbleScale`),
+- `hapticSteamRumble(low, high, slot)` — builds a 9-byte 0x80 report (×`RUMBLE_SCALE_PCT`),
   `relayEnqueue(0x80, p, 9, slot)`; **called from usbd (mode rumble callbacks) and loop**.
   Per-slot stuck-rumble tracking `g_rumble80On/Ms[NSLOT]`.
 - `haptic82Blocked`/`hapticLinkUp`/`hapticRelaySlotOk` — link-up + block gates (read
