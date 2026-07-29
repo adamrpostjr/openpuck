@@ -37,6 +37,31 @@ Similarly you can hold all 4 back buttons and press Y to switch (teehee) over to
 | WebUSB panel → mode 5 | DualSense + Gyro + Trackpad | PC only |
 | WebUSB panel → mode 6 | DS4/HIDGYRO + Gyro + Trackpad | PC only |
 | WebUSB panel → mode 9 | PS3 DualShock 3 / Sixaxis | Enumerates on a real PS3 (+ gyro/haptics) |
+| WebUSB panel → mode 10 | DirectInput (flight/space sims) | Every axis at once, as two DirectInput joysticks |
+| WebUSB panel → mode 11 | SInput (SDL-native) | Sticks + analog triggers + gyro + both trackpads + battery |
+
+**DirectInput mode** exists because Steam Input funnels everything through XInput, so only a handful of the
+controller's analog inputs can be live at once — a problem for flight and space sims, which bind axes through
+DirectInput. DirectInput itself caps a device at 8 axes, so this mode presents the controller as **two**
+joysticks (two HID collections, one USB interface):
+
+| Device | Axes | Buttons |
+|---|---|---|
+| #1 | X/Y = left stick, Rx/Ry = right stick, Z/Rz = left/right trigger, hat = D-pad | 1-26: A B X Y, LB RB, LT RT, Start, Select, L3 R3, D-pad U D L R, L4 R4 L5 R5, pad clicks, pad touches, Steam, QAM |
+| #2 | X/Y = left trackpad, Rx/Ry = right trackpad, Z/Rz/Slider = gyro X/Y/Z | 1-4: left/right pad click, left/right pad touch |
+
+Trackpad axes **latch**: they hold the last touched position (so a pad works as a throttle/trim slider) and
+re-centre when you *click* that pad. No remapping is applied in this mode — every physical button, paddles
+included, is its own bindable button, since the sim does the binding. The mode is input-only: DirectInput
+force feedback is a separate HID class, so rumble is not wired up here (use another mode if you want rumble).
+DirectInput is a Windows API — on Linux/SteamOS the SInput mode below is the one that exposes everything.
+
+**SInput mode** speaks [SInput](https://docs.handheldlegend.com/s/sinput), Hand Held Legend's open gamepad
+protocol that SDL3 and Steam Input bind with a dedicated driver. It is the one mode that doesn't impersonate
+anybody: sticks, *both* analog triggers, gyro + accelerometer, **both** trackpads (as two touchpads) and the
+battery level are all reported natively and simultaneously, with rumble coming back from the host. It needs an
+SDL build that ships the SInput driver (SDL 3.4+ / a current Steam client); older hosts fall back to seeing a
+plain HID gamepad.
 
 I'm also adding various QOL items as I go as well. For example having to hold the Steam button for like 6 seconds feels like an eternity. If Steam is open you can do Steam + Y for a shutdown. I'm adding Steam + Y for 2 seconds as a shutdown chort in ALL modes now.
 

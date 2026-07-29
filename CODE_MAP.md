@@ -351,6 +351,40 @@ DS4-layout (054C:05C4) + gyro. Same structure as PS5.
 calib helper `psNeutralCalib` writes 34 bytes (buf[6..33]) while callers return 36/40
 (remainder zeroed by the prior memset).
 
+## 10b. Open / generic personalities
+
+### `mode_dinput.cpp` / `mode_dinput.h`  (`g_dinputCtl`, MODE_DINPUT)
+Generic DirectInput joystick (1209:4F50). Dynamic-mount, STREAM-style, **no report
+callbacks → no usbd-task user code** (input-only: DirectInput force feedback is the PID
+class, not the vendor rumble reports the other modes decode).
+- **Descriptor**: ONE `DI_HID_DESC` with **two top-level Application collections** →
+  Windows makes one HIDClass PDO (= one DirectInput device) per collection, which is how
+  13 analog inputs fit a format capped at 8 axes/device. Report 1 = sticks/triggers/hat +
+  26 buttons; report 2 = both trackpads + gyro XYZ + 4 pad buttons. Both 15 payload bytes.
+- **loop task**: `task()` rate-gated (`USB_STREAM_MS`), `diBuildStick` + `diBuildMotion`
+  from `g_in[bond]`, two `usbTxHid` sends per slot per tick.
+- **State**: `g_padAxis[NSLOT]` — LATCHED trackpad axes (a pad only reports while touched,
+  so the axis holds the last position and a pad CLICK re-centres it). Loop-context only.
+- Buttons are the RAW `TB_*` bits (no `psButtonsFromSteam` remap; `etypeForMode` = ET_NONE).
+
+### `mode_sinput.cpp` / `mode_sinput.h`  (`g_sinputCtl`, MODE_SINPUT)
+SInput, the open SDL-native gamepad protocol (2E8A:10C6 = the generic ID SDL's SInput
+driver matches). Dynamic-mount, STREAM-style. **Registers a set-report callback.**
+- **Wire format** (SDL `SDL_hidapi_sinput.c` + the MIT-0 reference lib): 64-byte input
+  `0x01` = plug/charge, 4 button bytes, 6×s16 sticks+triggers, u32 IMU timestamp, 6×s16
+  accel+gyro, 2×(s16 x, y, pressure) touchpads; 64-byte input `0x02` = command replies;
+  48-byte output `0x03` = `[cmd]` HAPTIC(1) / FEATURES(2) / PLAYERLED(3) / RGB(4).
+- **usbd task**: `sinSetCommon` → FEATURES sets `g_sinFeatReq[slot]`; HAPTIC type 1
+  (freq/amp pairs, louder band per side) or type 2 (ERM amplitudes) →
+  `hapticSteamRumble(lo, hi, bond)`.
+- **loop task**: `task()` answers a pending FEATURES **ahead of the stream gate** (SDL's
+  init gives up after ~100 ms) via `sinBuildFeatures` → `usbTxHid(0x02,…)`, then the
+  rate-gated `sinBuild` → `usbTxHid(0x01,…)`.
+- **Cross-task**: `g_sinFeatReq[NSLOT]` (`volatile`, set usbd / cleared loop);
+  `g_usbToBond[]` read in usbd (bounds-checked), as in the PS modes.
+- IMU passes through raw: the SInput wire frame (+x left, +y forward, +z up) IS the SC2's
+  own frame, and accel/gyro keep the SAME permutation (the fusion-handedness constraint).
+
 ### `gamepad_util.cpp` / `gamepad_util.h` — shared report-builders (called from loop task)
 `swStick`, `psNeutralCalib` (writes through `buf[33]`), trackpad→touch mappers
 (`touchPackPads` writes 8 bytes = two 4-byte points), `psButtonsFromSteam` (back-paddle/

@@ -41,7 +41,13 @@
 // console wants a bare Sixaxis HID, not a composite). Answers the PS3's GET_REPORT(0xF2/0xF5/0xEF/0x01)
 // enable handshake. + gyro/accel + rumble.
 #define MODE_PS3 9
-#define MODE_MAX 9
+// Generic DirectInput joystick -- presents EVERY analog input at once (sticks, triggers, both trackpads, gyro)
+// as two DirectInput devices, for flight/space sims that bind axes through DirectInput rather than XInput.
+#define MODE_DINPUT 10
+// SInput: the open SDL-native gamepad protocol (docs.handheldlegend.com/s/sinput). Sticks + analog triggers +
+// gyro/accel + BOTH trackpads + battery, all bound natively by SDL3 / Steam Input with no impersonation.
+#define MODE_SINPUT 11
+#define MODE_MAX 11
 
 // The two "game" personalities drop the wake-mouse + WebUSB interfaces so the device is a genuine single-HID PS
 // controller (some PC games -- e.g. Fortnite/UE GameInput -- refuse PS classification when extra interfaces are
@@ -86,7 +92,10 @@ static inline uint8_t etypeForMode(uint8_t m)
 	case MODE_PS5_GAME:
 		return ET_DS5;
 	default:
-		return ET_NONE; // Steam / Lizard
+		// Steam / Lizard forward raw input for the host to remap. DirectInput and SInput expose every
+		// physical button as its own bindable button (paddles included), so they have nothing to remap
+		// either -- binding happens in the sim / in SDL.
+		return ET_NONE;
 	}
 }
 
