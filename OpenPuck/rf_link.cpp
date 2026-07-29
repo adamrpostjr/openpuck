@@ -724,16 +724,20 @@ uint8_t rfConnTx(uint8_t ch, uint8_t s1, const uint8_t *payload, uint8_t plen,
 							want = g_chordBtn[2];
 						else if (g_in[g_curSlot].buttons &
 							 TB_DLF)
-							want = g_chordDpad[CHD_LEFT];
+							want = g_chordDpad
+								[CHD_LEFT];
 						else if (g_in[g_curSlot].buttons &
 							 TB_DUP)
-							want = g_chordDpad[CHD_UP];
+							want = g_chordDpad
+								[CHD_UP];
 						else if (g_in[g_curSlot].buttons &
 							 TB_DRT)
-							want = g_chordDpad[CHD_RIGHT];
+							want = g_chordDpad
+								[CHD_RIGHT];
 						else if (g_in[g_curSlot].buttons &
 							 TB_DDN)
-							want = g_chordDpad[CHD_DOWN];
+							want = g_chordDpad
+								[CHD_DOWN];
 					}
 					if (want != 0xFF &&
 					    want == chWant[g_curSlot]) {
