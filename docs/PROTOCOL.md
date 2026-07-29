@@ -347,6 +347,33 @@ does a `detach -> rebuild -> attach` so the host re-reads the descriptor cleanly
   feature `0x01` passthrough). Restricting this to `0x82` alone silently dropped the ping/grip/test
   haptics, which use other report IDs.
 
+#### ⚠️ Two different `0x8x` id spaces — never share a rule between them
+
+Steam drives the actuators through the Triton **OUTPUT report** space, which is a *different* id space
+from the feature-`0x01` **command** space even though the numbers overlap. Ground truth: SDL
+`src/joystick/hidapi/steam/controller_structs.h` (`ValveTritonOutReportMessageIDs`) and
+`controller_constants.h`. The payload sizes match this firmware's report descriptor exactly:
+
+| id | OUTPUT report (haptics/actuators) | payload | feature `0x01` command |
+|----|-----------------------------------|---------|------------------------|
+| `0x80` | `HAPTIC_RUMBLE` `[type][intensity u16][{speed u16,gain}L][{…}R]` | 9 | `SET_DIGITAL_MAPPINGS` |
+| `0x81` | `HAPTIC_PULSE` `[side][on_us u16][off_us u16][repeat u16]` | 7 | `CLEAR_DIGITAL_MAPPINGS` |
+| `0x82` | `HAPTIC_COMMAND` `[side][command][gain_db]` | 3 | `GET_DIGITAL_MAPPINGS` |
+| `0x83` | `HAPTIC_LFO_TONE` `[side][gain_db][freq u16][dur u16][lfo_freq u16][lfo_depth]` | 9 | `GET_ATTRIBUTES_VALUES` |
+| `0x84` | `HAPTIC_LOG_SWEEP` `[side][gain_db][dur u16][start u16][end u16]` | 8 | `GET_ATTRIBUTE_LABEL` |
+| `0x85` | `HAPTIC_SCRIPT` `[side][script_id][gain_db]` | 3 | `SET_DEFAULT_DIGITAL_MAPPINGS` |
+| `0x86` | (unnamed) | 3 | `FACTORY_RESET` |
+| `0x87`+ | 63-byte settings/config | 63 | `SET_SETTINGS_VALUES` … |
+
+`0x81` is the trap: the feature-channel `0x81` (`CLEAR_DIGITAL_MAPPINGS`) is dropped in Steam mode on
+purpose (`g_drop81`, console `S81` — it is the connect-time amp-clicker and OpenPuck does its own input
+translation), but the OUTPUT-report `0x81` is `HAPTIC_PULSE` — the left/right pulse Steam fires for
+trackpad **click** feedback ("Regular Press"), the **trigger full-pull** click and GripSense cues.
+Extending the feature-channel drop to the OUTPUT report is what made those haptics missing
+(issues #163 / #166) while "Soft Press" kept working, since that one rides `0x82 HAPTIC_COMMAND`.
+Pulses carry their own `repeat_count`, so they are self-terminating: there is no latch to strand and no
+stop frame that can be lost (unlike the `0x82` on/off pair or `0x80` rumble).
+
 ### 9.2 Xbox mode
 
 - VID:PID `045E:028E`, clean device (no CDC/WebUSB)

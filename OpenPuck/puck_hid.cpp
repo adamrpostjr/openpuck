@@ -123,9 +123,11 @@ static const uint8_t PUCK_LIZARD_HID_DESC[] = {
 
 static Adafruit_USBD_HID hid[NSLOT];
 
-// Drop Steam's relayed 0x81 CLEAR_DIGITAL_MAPPINGS in Steam mode (console "S81" toggles; on by default). It's
-// the confirmed amp-clicker in Steam's per-connect config and OpenPuck doesn't need it (own input translation
-// + id9=0 keepalive). Reversible from the console if it regresses.
+// Drop Steam's relayed FEATURE cmd 0x81 = ID_CLEAR_DIGITAL_MAPPINGS in Steam mode (console "S81" toggles; on
+// by default). It's the confirmed amp-clicker in Steam's per-connect config and OpenPuck doesn't need it (own
+// input translation + id9=0 keepalive). Reversible from the console if it regresses.
+// FEATURE-CHANNEL ONLY: the OUTPUT report with id 0x81 is ID_OUT_REPORT_HAPTIC_PULSE, an unrelated command
+// (see handleSet) -- dropping that one costs the trackpad-click / trigger-full-pull haptics (#163, #166).
 bool g_drop81 = true;
 
 // Per-slot shadow of the controller's SET_SETTINGS_VALUES array (id-indexed u16, ids 0..0x52). Steam writes
@@ -242,8 +244,14 @@ static void handleSet(int slot, uint8_t rid, hid_report_type_t type,
 	// Steam OUTPUT reports 0x80-0x89. The haptic/actuator reports (0x80-0x86) are relayed to the controller,
 	// and ONLY when they arrive on the CONNECTED slot's interface: we have one controller but expose 4 puck
 	// slots, and a report aimed at a DIFFERENT slot made the controller buzz at random (the slot gate below
-	// fixes that). Must NOT clamp to 0x82-only: ping/grip/test haptics ride other report IDs (0x85/0x86). The
-	// 63-byte settings/config reports 0x87/0x88/0x89 are NOT haptics and reach the controller via the
+	// fixes that). Must NOT clamp to 0x82-only -- Steam drives the actuators through the WHOLE Triton OUTPUT
+	// report space (ValveTritonOutReportMessageIDs, SDL steam/controller_structs.h; the ids match this
+	// interface's descriptor payload sizes exactly):
+	//   0x80 HAPTIC_RUMBLE(9)  0x81 HAPTIC_PULSE(7)   0x82 HAPTIC_COMMAND(3)
+	//   0x83 HAPTIC_LFO_TONE(9) 0x84 HAPTIC_LOG_SWEEP(8) 0x85 HAPTIC_SCRIPT(3)  0x86 (3, unnamed)
+	// These ids are NOT the feature-0x01 command ids (controller_constants.h) -- same numbers, different
+	// meanings -- so a rule written for one channel must never be applied to the other.
+	// The 63-byte settings/config reports 0x87/0x88/0x89 are NOT haptics and reach the controller via the
 	// feature-0x01 passthrough path instead.
 	if (type == HID_REPORT_TYPE_OUTPUT) {
 		if (rid >= 0x80 && rid <= 0x89) {
@@ -259,14 +267,19 @@ static void handleSet(int slot, uint8_t rid, hid_report_type_t type,
 		// exact condition under which Steam loops the same haptic command (-> connect/wake buzz loop).
 		bool muted = g_resumeMs &&
 			     millis() - g_resumeMs < POST_RESUME_MUTE_MS;
-		// Drop the OUTPUT-report form of 0x81 too (Steam's haptic-reset action, a 7-byte report id 0x81 with
-		// payloads 00../01..). Same amp-clicker as the feature-0x01 0x81; g_drop81 only covered the feature
-		// path, so this OUTPUT form was still leaking through and clicking. OpenPuck doesn't need it.
-		bool dropOut81 =
-			(g_drop81 && g_usbMode == MODE_STEAM && rid == 0x81);
-		if (g_hapticRelay && rid >= 0x80 && rid <= 0x86 && !dropOut81 &&
-		    n >= 1 && hapticRelaySlotOk(slot) && !lizardActive() &&
-		    !muted) {
+		// NOTE: report id 0x81 is NOT dropped here, unlike the feature-0x01 cmd 0x81. The two 0x81s live in
+		// DIFFERENT id spaces (SDL steam/controller_structs.h vs controller_constants.h):
+		//   OUTPUT  rid 0x81 = ID_OUT_REPORT_HAPTIC_PULSE, MsgHapticPulse {u8 side; u16 on_us; u16 off_us;
+		//                      u16 repeat_count} = the 7-byte "00.."/"01.." (side=left/right) reports Steam
+		//                      fires for trackpad CLICK feedback ("Regular Press"), the trigger FULL-PULL
+		//                      click and GripSense cues.
+		//   FEATURE cmd 0x81 = ID_CLEAR_DIGITAL_MAPPINGS (the mapping-engine reset, dropped below).
+		// Dropping the OUTPUT form as if it were the same command is what made those haptics missing
+		// (issues #163 / #166): "Soft Press" survived because it rides 0x82 ID_OUT_REPORT_HAPTIC_COMMAND,
+		// while every pulse-based click was thrown away. Pulses are self-terminating (repeat_count in the
+		// payload), so there is no latch to strand and no stop frame to lose.
+		if (g_hapticRelay && rid >= 0x80 && rid <= 0x86 && n >= 1 &&
+		    hapticRelaySlotOk(slot) && !lizardActive() && !muted) {
 			if (!haptic82Blocked(slot)) {
 				relayEnqueue(rid, b,
 					     (uint8_t)(n > RELAY_MAXP ?
