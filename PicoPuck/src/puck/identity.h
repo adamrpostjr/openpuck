@@ -8,7 +8,7 @@
 
 // The 25-byte 0x83 GET_ATTRIBUTES payload (product 0x1304 = Valve puck), copied
 // from OpenPuck/identity.cpp. Steam reads this to identify the dongle.
-extern const uint8_t ATTR83[25];
+#include "hid_reports.h" // ATTR83 (shared)
 
 // Board / unit serial strings (Valve "MXB..." / "FXB..." shape), derived from
 // the RP2040/RP2350 unique flash id at boot. NUL-terminated, <=15 chars.

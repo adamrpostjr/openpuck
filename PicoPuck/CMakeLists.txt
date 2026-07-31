@@ -68,6 +68,7 @@ target_sources(picopuck PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../OpenPuck/src/common/hid_reports.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../OpenPuck/src/common/hd_rumble.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../OpenPuck/src/common/gamepad_util.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../OpenPuck/src/common/usb_mount.c
 )
 
 target_include_directories(picopuck PRIVATE

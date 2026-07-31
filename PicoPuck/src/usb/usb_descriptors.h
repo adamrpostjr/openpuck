@@ -43,9 +43,12 @@ enum {
 // Cache the active mode's descriptors. Call once at boot, before tud_init().
 void usb_descriptors_init(void);
 
-// Number of emulated HID interfaces presented in the active emulated mode (one
-// per paired controller; 1 otherwise). Used to fan the report stream + report
-// callbacks across interface==slot.
+// Number of emulated HID gamepad interfaces currently presented (== the dynamic
+// mount count). Used to fan the report stream across the mounted interfaces.
 uint8_t usb_emu_iface_count(void);
+
+// Rebuild the emulated config for `k` gamepad interfaces (0..PP_NSLOT). Called by
+// usb_reenumerate() (the shared dynamic mounter's platform hook) while detached.
+void usb_descriptors_set_emu_ifaces(uint8_t k);
 
 #endif // PICOPUCK_USB_DESCRIPTORS_H

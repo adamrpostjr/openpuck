@@ -6,18 +6,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-
-#define MODE_STEAM 0     // Valve puck (transparent SC2 / synth for generic pads)
-#define MODE_XBOX 1      // Xbox 360 XInput
-#define MODE_SW_HORI 2   // Switch HORIPAD
-#define MODE_LIZARD 3    // Puck HID, always keyboard+mouse
-#define MODE_SW_PRO 4    // Nintendo Switch Pro Controller + gyro
-#define MODE_PS5 5       // Sony DualSense + gyro + split trackpad
-#define MODE_HIDGYRO 6   // DS4-layout generic HID gamepad + gyro
-#define MODE_PS5_GAME 7  // DualSense, clean single-HID
-#define MODE_DS4_GAME 8  // DS4, clean single-HID
-#define MODE_PS3 9       // DualShock 3 / Sixaxis
-#define MODE_MAX 9
+#include "usb_modes.h" // shared MODE_* numbers (WebUSB protocol contract)
 
 // Modes that present the Valve puck HID (Steam personality + its 4 slots).
 static inline bool mode_is_puck(uint8_t m)

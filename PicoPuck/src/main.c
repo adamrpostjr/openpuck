@@ -13,6 +13,7 @@
 #include "puck/personality.h"
 #include "puck/emu_present.h"
 #include "puck/xinput.h"
+#include "usb_mount.h"
 #include "usb/usb_tx.h"
 #include "usb/usb_descriptors.h"
 #include "usb/webusb.h"
@@ -28,7 +29,7 @@ int main(void)
 {
 	stdio_init_all();
 
-	settings_load();  // active USB mode (before descriptors)
+	settings_load(); // active USB mode (before descriptors)
 	identity_init();
 	slots_init();
 	puck_personality_init();
@@ -41,13 +42,20 @@ int main(void)
 	bool puck = mode_is_puck(settings_mode());
 	bool xinput = mode_is_xinput(settings_mode());
 
+	// HID emulated modes present one gamepad per CONNECTED controller, mounted /
+	// unmounted dynamically (no reboot) — same behaviour as OpenPuck. Puck and
+	// XInput modes keep their fixed interface layout.
+	if (!puck && !xinput)
+		usb_mount_enable(true, PP_NSLOT);
+
 	// The user LED hangs off the CYW43 chip; this init also hands the radio to
 	// BTstack (btstack_cyw43_init on the async_context).
 	bool have_radio = (cyw43_arch_init() == 0);
 	bool have_bt = have_radio && bt_host_init();
 
 	printf("\n[picopuck] boot commit=%s board=%d mode=%d radio=%d bt=%d\n",
-	       PICOPUCK_GIT_COMMIT, PP_BOARD, settings_mode(), have_radio, have_bt);
+	       PICOPUCK_GIT_COMMIT, PP_BOARD, settings_mode(), have_radio,
+	       have_bt);
 
 	watchdog_enable(PP_WATCHDOG_MS, /*pause_on_debug=*/true);
 
@@ -55,21 +63,22 @@ int main(void)
 	bool led_on = false;
 
 	while (1) {
-		tud_task();       // USB device events
-		usb_tx_pump();    // drain queued HID reports
+		tud_task(); // USB device events
+		usb_tx_pump(); // drain queued HID reports
 
 		if (puck)
-			puck_personality_task();  // puck 0x79 / 0x7B / 0x43 + synth stream
+			puck_personality_task(); // puck 0x79 / 0x7B / 0x43 + synth stream
 		else if (xinput)
-			xinput_task();            // Xbox 360 XInput report stream
+			xinput_task(); // Xbox 360 XInput report stream
 		else
-			emu_present_task();       // emulated controller report stream
+			emu_present_task(); // emulated controller report stream
 
-		webusb_task();    // panel commands (works in every mode)
+		usb_mount_task(); // dynamic mount/unmount on connect/disconnect (emu modes)
+		webusb_task(); // panel commands (works in every mode)
 
 		if (have_bt) {
-			cyw43_arch_poll();  // services BTstack on its async_context
-			bt_host_task();     // scan / battery / rssi / rumble
+			cyw43_arch_poll(); // services BTstack on its async_context
+			bt_host_task(); // scan / battery / rssi / rumble
 		} else if (have_radio) {
 			cyw43_arch_poll();
 		}
@@ -77,7 +86,8 @@ int main(void)
 		if (absolute_time_diff_us(get_absolute_time(), next_led) <= 0) {
 			led_on = !led_on;
 			if (have_radio)
-				cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, led_on);
+				cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN,
+						    led_on);
 			next_led = make_timeout_time_ms(PP_STATUS_LED_MS);
 		}
 

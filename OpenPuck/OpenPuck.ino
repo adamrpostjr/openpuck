@@ -77,6 +77,7 @@ static bool s_dynWantWebusb = false, s_dynWantWakeMouse = false;
 // g_usbToBond must already be built for k connected controllers. Called at boot and by usb_mount's watcher.
 void usbReenumerate(uint8_t k)
 {
+	faultDiagTrace(FR_MOUNT, k); // flight recorder: mount-set change
 	USBDevice.detach();
 	delay(20);
 	USBDevice.clearConfiguration();

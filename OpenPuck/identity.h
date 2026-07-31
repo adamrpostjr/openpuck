@@ -11,6 +11,6 @@ extern char g_usbSerial
 	[18]; // per-mode USB serial (Steam uses g_unit; others get a suffix)
 
 // 0x83 attributes, returned by the puck feature command channel.
-extern const uint8_t ATTR83[25];
+#include "src/common/hid_reports.h" // ATTR83 (shared)
 
 void genSerial();

@@ -21,27 +21,10 @@
 #define OPK_FACTORY_RESET 0
 #endif
 
-// ---- USB presentation modes (g_usbMode). RF poll/relay is identical across all; only USB enumeration +
-//      report mapping differ. ----
-#define MODE_STEAM 0 // Valve puck; auto-lizard when Steam closed
-#define MODE_XBOX 1 // XInput + right-pad mouse
-#define MODE_SW_HORI 2 // HORIPAD (Switch console whitelist)
-#define MODE_LIZARD \
-	3 // Puck HID; always keyboard+mouse (ignores Steam heartbeat)
-#define MODE_SW_PRO 4 // Nintendo Switch Pro Controller (057E:2009) + gyro
-// Sony DualSense (054C:0CE6) + gyro + split trackpad (+ wake mouse + WebUSB panel)
-#define MODE_PS5 5
-// DS4-layout generic HID gamepad + gyro (+ wake mouse + WebUSB panel)
-#define MODE_HIDGYRO 6
-// DualSense, CLEAN single-HID (no wake/WebUSB) so PC games classify it as PlayStation (Fortnite)
-#define MODE_PS5_GAME 7
-// DS4, CLEAN single-HID (no wake/WebUSB) for game PlayStation classification
-#define MODE_DS4_GAME 8
-// Sony DualShock 3 / Sixaxis (054C:0268) -- CLEAN single-HID so it enumerates on a REAL PS3 console (the
-// console wants a bare Sixaxis HID, not a composite). Answers the PS3's GET_REPORT(0xF2/0xF5/0xEF/0x01)
-// enable handshake. + gyro/accel + rumble.
-#define MODE_PS3 9
-#define MODE_MAX 9
+// ---- USB presentation modes (g_usbMode). RF poll/relay is identical across all;
+// only USB enumeration + report mapping differ. The MODE_* numbers are the shared
+// WebUSB protocol contract (see src/common/usb_modes.h) — identical to PicoPuck.
+#include "src/common/usb_modes.h"
 
 // The two "game" personalities drop the wake-mouse + WebUSB interfaces so the device is a genuine single-HID PS
 // controller (some PC games -- e.g. Fortnite/UE GameInput -- refuse PS classification when extra interfaces are

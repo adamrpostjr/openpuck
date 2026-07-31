@@ -30,6 +30,8 @@ extern const uint8_t BT_PAIR_2[31];
 
 extern const uint8_t PUCK_HID_DESC[372];
 
+extern const uint8_t ATTR83[25];
+
 #ifdef __cplusplus
 }
 #endif
