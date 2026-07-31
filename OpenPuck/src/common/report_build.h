@@ -43,6 +43,17 @@ uint16_t build_ps5(const puck_input_t *in, const report_cfg_t *cfg,
 		   report_seq_t *seq, uint8_t out[63]); // DualSense
 uint16_t build_ds3(const puck_input_t *in, const report_cfg_t *cfg,
 		   uint8_t out[48]); // DualShock 3 / Sixaxis
+uint16_t build_switch_hori(const puck_input_t *in, const report_cfg_t *cfg,
+			   uint8_t out[8]); // Switch HORIPAD (8-byte, no id)
+
+// Switch Pro Controller pieces (the handshake / battery / timer state stays in
+// each firmware's mode_switch_pro; these are the shared button-field + IMU math).
+// switch_pro_buttons packs the 24-bit JC button field from g_in + remap config.
+uint32_t switch_pro_buttons(const puck_input_t *in, const report_cfg_t *cfg);
+// switch_pro_imu writes the 36-byte IMU region (3 samples of accel+gyro) of the
+// 0x30 report; gyro_scale10 is the user gyro sensitivity ×10 (10 = 1.0×).
+void switch_pro_imu(const puck_input_t *in, uint8_t gyro_scale10,
+		    uint8_t out36[36]);
 
 #ifdef __cplusplus
 }

@@ -23,77 +23,13 @@
 #include "pico/time.h"
 #include "hid_reports.h"
 #include "hd_rumble.h"
+#include "report_build.h"
 
 #define ET_SWITCH 1 // per-type config index (matches OpenPuck ET_SWITCH)
 #define SW_PRO_REPORT_MS 15u // 66 Hz
 #define SW_PRO_REPORT_MS_120 8u // ~120 Hz
 #define SW_STREAM_MS 4u // "full" (~250 Hz), matches emu_present cadence
-#define SW_ACCEL_DIV 4 // SC2 ±2g (16384/g) → Pro ±8g (4096/g)
 // CHORD_BACK4 comes from the shared triton_masks.h (via emu.h → triton.h).
-
-#define JC_BTN_Y (1u << 0)
-#define JC_BTN_X (1u << 1)
-#define JC_BTN_B (1u << 2)
-#define JC_BTN_A (1u << 3)
-#define JC_BTN_R (1u << 6)
-#define JC_BTN_ZR (1u << 7)
-#define JC_BTN_MINUS (1u << 8)
-#define JC_BTN_PLUS (1u << 9)
-#define JC_BTN_RSTICK (1u << 10)
-#define JC_BTN_LSTICK (1u << 11)
-#define JC_BTN_HOME (1u << 12)
-#define JC_BTN_CAPTURE (1u << 13)
-#define JC_BTN_DOWN (1u << 16)
-#define JC_BTN_UP (1u << 17)
-#define JC_BTN_RIGHT (1u << 18)
-#define JC_BTN_LEFT (1u << 19)
-#define JC_BTN_L (1u << 22)
-#define JC_BTN_ZL (1u << 23)
-
-static uint32_t code_to_jc(uint8_t c, uint32_t fA, uint32_t fB, uint32_t fX,
-			   uint32_t fY)
-{
-	switch (c) {
-	case 1:
-		return fA;
-	case 2:
-		return fB;
-	case 3:
-		return fX;
-	case 4:
-		return fY;
-	case 5:
-		return JC_BTN_L;
-	case 6:
-		return JC_BTN_R;
-	case 7:
-		return JC_BTN_LSTICK;
-	case 8:
-		return JC_BTN_RSTICK;
-	case 9:
-		return JC_BTN_MINUS;
-	case 10:
-		return JC_BTN_PLUS;
-	case 11:
-		return JC_BTN_HOME;
-	case 18:
-		return JC_BTN_CAPTURE;
-	case 19:
-		return JC_BTN_ZL;
-	case 20:
-		return JC_BTN_ZR;
-	case 12:
-		return JC_BTN_UP;
-	case 13:
-		return JC_BTN_DOWN;
-	case 14:
-		return JC_BTN_LEFT;
-	case 15:
-		return JC_BTN_RIGHT;
-	default:
-		return 0;
-	}
-}
 
 // Per-slot handshake state — each presented Pro Controller runs its own init
 // handshake and needs a distinct MAC (OUI 7C:BB:8A, last byte 0x10+slot) so the
@@ -163,75 +99,14 @@ static uint8_t jc_battery_nibble(int slot)
 			 << 1); // even nibble {0,2,4,6,8}; leaves bit4 (charging) clear
 }
 
-// Scale a gyro axis by sw_gyro10/10, clamped to int16.
-static int16_t gscale(int16_t v)
-{
-	uint8_t g10 = settings()->sw_gyro10;
-	if (g10 == 10)
-		return v;
-	int32_t s = (int32_t)v * (int32_t)g10 / 10;
-	if (s > 32767)
-		s = 32767;
-	else if (s < -32768)
-		s = -32768;
-	return (int16_t)s;
-}
 static void jc_input_prefix(int slot, uint8_t *out)
 {
 	const pp_type_cfg_t *t = &settings()->type[ET_SWITCH];
-	uint32_t b = g_in[slot].buttons;
-	bool qam = t->qam && (b & TB_QAM);
-	if ((b & CHORD_BACK4) == CHORD_BACK4)
-		b &= ~(uint32_t)(TB_A | TB_B | TB_X | TB_Y);
-	uint32_t fA = t->ab_swap ? JC_BTN_B : JC_BTN_A;
-	uint32_t fB = t->ab_swap ? JC_BTN_A : JC_BTN_B;
-	uint32_t fX = t->ab_swap ? JC_BTN_Y : JC_BTN_X;
-	uint32_t fY = t->ab_swap ? JC_BTN_X : JC_BTN_Y;
-	uint32_t jc = 0;
-	if (b & TB_Y)
-		jc |= fY;
-	if (b & TB_B)
-		jc |= fB;
-	if (b & TB_A)
-		jc |= fA;
-	if (b & TB_X)
-		jc |= fX;
-	if (b & TB_LB)
-		jc |= JC_BTN_L;
-	if (b & TB_RB)
-		jc |= JC_BTN_R;
-	if ((g_in[slot].lt >= SW_TRIG_ON) || (b & TB_L2))
-		jc |= JC_BTN_ZL;
-	if ((g_in[slot].rt >= SW_TRIG_ON) || (b & TB_R2))
-		jc |= JC_BTN_ZR;
-	if (b & TB_VIEW)
-		jc |= JC_BTN_PLUS;
-	if (b & TB_MENU)
-		jc |= JC_BTN_MINUS;
-	if (b & TB_L3)
-		jc |= JC_BTN_LSTICK;
-	if (b & TB_R3)
-		jc |= JC_BTN_RSTICK;
-	if (b & TB_STEAM)
-		jc |= JC_BTN_HOME;
-	if (b & TB_DDN)
-		jc |= JC_BTN_DOWN;
-	if (b & TB_DUP)
-		jc |= JC_BTN_UP;
-	if (b & TB_DRT)
-		jc |= JC_BTN_RIGHT;
-	if (b & TB_DLF)
-		jc |= JC_BTN_LEFT;
-	if (b & TB_L4)
-		jc |= code_to_jc(t->back[0], fA, fB, fX, fY);
-	if (b & TB_R4)
-		jc |= code_to_jc(t->back[1], fA, fB, fX, fY);
-	if (b & TB_L5)
-		jc |= code_to_jc(t->back[2], fA, fB, fX, fY);
-	if (b & TB_R5)
-		jc |= code_to_jc(t->back[3], fA, fB, fX, fY);
-	if (qam)
-		jc |= code_to_jc(t->qam, fA, fB, fX, fY);
+	report_cfg_t cfg = { t->ab_swap,
+			     { t->back[0], t->back[1], t->back[2], t->back[3] },
+			     t->qam };
+	uint32_t jc =
+		switch_pro_buttons(&g_in[slot], &cfg); // shared button field
 	out[0] = g_jcTimer[slot]++;
 	uint8_t chg = (g_battery_state[slot] == 1) ? 0x10 : 0x00;
 	out[1] = (uint8_t)((jc_battery_nibble(slot) << 4) | chg);
@@ -481,30 +356,7 @@ static void swpro_build_30(int slot, uint8_t out[63])
 {
 	memset(out, 0, 63);
 	jc_input_prefix(slot, out);
-	// accel X<-+ay, Y<--ax, Z<-+az (÷4 for ±8g cal); gyro roll<-+gy, pitch<--gx,
-	// yaw<-+gz. Same signed permutation across both so the console's accel/gyro
-	// fusion keeps a consistent handedness (see OpenPuck notes).
-	int16_t aX = (int16_t)(g_in[slot].ay / SW_ACCEL_DIV);
-	int16_t aY = (int16_t)((-(int16_t)g_in[slot].ax) / SW_ACCEL_DIV);
-	int16_t aZ = (int16_t)(g_in[slot].az / SW_ACCEL_DIV);
-	int16_t groll = gscale((int16_t)g_in[slot].gy);
-	int16_t gpitch = gscale((int16_t)(-(int16_t)g_in[slot].gx));
-	int16_t gyaw = gscale((int16_t)g_in[slot].gz);
-	for (int k = 0; k < 3; k++) {
-		int o = 12 + k * 12;
-		out[o + 0] = aX & 0xFF;
-		out[o + 1] = (aX >> 8) & 0xFF;
-		out[o + 2] = aY & 0xFF;
-		out[o + 3] = (aY >> 8) & 0xFF;
-		out[o + 4] = aZ & 0xFF;
-		out[o + 5] = (aZ >> 8) & 0xFF;
-		out[o + 6] = groll & 0xFF;
-		out[o + 7] = (groll >> 8) & 0xFF;
-		out[o + 8] = gpitch & 0xFF;
-		out[o + 9] = (gpitch >> 8) & 0xFF;
-		out[o + 10] = gyaw & 0xFF;
-		out[o + 11] = (gyaw >> 8) & 0xFF;
-	}
+	switch_pro_imu(&g_in[slot], settings()->sw_gyro10, out + 12);
 }
 
 static uint16_t swpro_build(int slot, uint8_t *out, uint8_t *rid)

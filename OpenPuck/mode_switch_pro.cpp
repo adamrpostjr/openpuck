@@ -1,6 +1,7 @@
 #include "mode_switch_pro.h"
 #include "triton.h"
 #include "gamepad_util.h"
+#include "src/common/report_build.h"
 #include "config.h"
 #include "haptics.h"
 #include "bonds.h"
@@ -25,7 +26,6 @@ SwitchProController g_switchPro;
 #define SW_PRO_REPORT_MS 15u // 66 Hz
 #define SW_PRO_REPORT_MS_120 8u // ~120 Hz
 // SC2 accel is +/-2g (16384/g); /4 -> the genuine Pro +/-8g (4096/g) the Switch cal expects
-#define SW_ACCEL_DIV 4
 
 uint8_t g_swProRate =
 	2; // 0 = 66Hz, 1 = 120Hz, 2 = full (~250Hz / USB_STREAM_MS, default)
@@ -60,81 +60,7 @@ static void swProLoadCfg()
 		f.close();
 	}
 }
-// Scale a gyro axis by g_swGyroScale10/10, clamped to int16 (3x can saturate at high rates -- expected).
-static int16_t gscale(int16_t v)
-{
-	if (g_swGyroScale10 == 10)
-		return v;
-	int32_t s = (int32_t)v * (int32_t)g_swGyroScale10 / 10;
-	if (s > 32767)
-		s = 32767;
-	else if (s < -32768)
-		s = -32768;
-	return (int16_t)s;
-}
 
-#define JC_BTN_Y (1u << 0)
-#define JC_BTN_X (1u << 1)
-#define JC_BTN_B (1u << 2)
-#define JC_BTN_A (1u << 3)
-#define JC_BTN_R (1u << 6)
-#define JC_BTN_ZR (1u << 7)
-#define JC_BTN_MINUS (1u << 8)
-#define JC_BTN_PLUS (1u << 9)
-#define JC_BTN_RSTICK (1u << 10)
-#define JC_BTN_LSTICK (1u << 11)
-#define JC_BTN_HOME (1u << 12)
-#define JC_BTN_CAPTURE (1u << 13)
-#define JC_BTN_DOWN (1u << 16)
-#define JC_BTN_UP (1u << 17)
-#define JC_BTN_RIGHT (1u << 18)
-#define JC_BTN_LEFT (1u << 19)
-#define JC_BTN_L (1u << 22)
-#define JC_BTN_ZL (1u << 23)
-static uint32_t codeToJc(uint8_t c, uint32_t fA, uint32_t fB, uint32_t fX,
-			 uint32_t fY)
-{
-	switch (c) {
-	case 1:
-		return fA;
-	case 2:
-		return fB;
-	case 3:
-		return fX;
-	case 4:
-		return fY;
-	case 5:
-		return JC_BTN_L;
-	case 6:
-		return JC_BTN_R;
-	case 7:
-		return JC_BTN_LSTICK;
-	case 8:
-		return JC_BTN_RSTICK;
-	case 9:
-		return JC_BTN_MINUS;
-	case 10:
-		return JC_BTN_PLUS;
-	case 11:
-		return JC_BTN_HOME;
-	case 18:
-		return JC_BTN_CAPTURE; // Capture / Screenshot (Switch-only target)
-	case 19:
-		return JC_BTN_ZL; // left trigger
-	case 20:
-		return JC_BTN_ZR; // right trigger
-	case 12:
-		return JC_BTN_UP;
-	case 13:
-		return JC_BTN_DOWN;
-	case 14:
-		return JC_BTN_LEFT;
-	case 15:
-		return JC_BTN_RIGHT;
-	default:
-		return 0;
-	}
-}
 // NSLOT Pro-Controller HIDs (one per bond slot) + per-slot handshake state (timer, report-mode gate,
 // subcommand-reply FIFO), per-slot reply queue indices, per-slot last-stream millis, per-slot MAC, and
 // per-slot user-cal SPI mirror.
@@ -237,60 +163,11 @@ static void jcInputPrefix(uint8_t slot, uint8_t *out)
 {
 	uint8_t bond = jcBondOf(
 		slot); // input data comes from the mapped controller; timer/state stay per USB slot
-	uint32_t b = g_in[bond].buttons;
-	// QAM (3 dots) remap -> applied via codeToJc below like a back paddle (so Capture(18)/any target work).
-	bool qam = g_qamMap && (b & TB_QAM);
-	if ((b & CHORD_BACK4) == CHORD_BACK4)
-		b &= ~(uint32_t)(TB_A | TB_B | TB_X | TB_Y);
-	uint32_t fA = g_abSwap ? JC_BTN_B : JC_BTN_A,
-		 fB = g_abSwap ? JC_BTN_A : JC_BTN_B;
-	uint32_t fX = g_abSwap ? JC_BTN_Y : JC_BTN_X,
-		 fY = g_abSwap ? JC_BTN_X : JC_BTN_Y;
-	uint32_t jc = 0;
-	if (b & TB_Y)
-		jc |= fY;
-	if (b & TB_B)
-		jc |= fB;
-	if (b & TB_A)
-		jc |= fA;
-	if (b & TB_X)
-		jc |= fX;
-	if (b & TB_LB)
-		jc |= JC_BTN_L;
-	if (b & TB_RB)
-		jc |= JC_BTN_R;
-	if ((g_in[bond].lt >= SW_TRIG_ON) || (b & 0x8000000u))
-		jc |= JC_BTN_ZL;
-	if ((g_in[bond].rt >= SW_TRIG_ON) || (b & 0x800000u))
-		jc |= JC_BTN_ZR;
-	if (b & TB_VIEW)
-		jc |= JC_BTN_PLUS;
-	if (b & TB_MENU)
-		jc |= JC_BTN_MINUS;
-	if (b & TB_L3)
-		jc |= JC_BTN_LSTICK;
-	if (b & TB_R3)
-		jc |= JC_BTN_RSTICK;
-	if (b & TB_STEAM)
-		jc |= JC_BTN_HOME;
-	if (b & TB_DDN)
-		jc |= JC_BTN_DOWN;
-	if (b & TB_DUP)
-		jc |= JC_BTN_UP;
-	if (b & TB_DRT)
-		jc |= JC_BTN_RIGHT;
-	if (b & TB_DLF)
-		jc |= JC_BTN_LEFT;
-	if (b & TB_L4)
-		jc |= codeToJc(g_back[0], fA, fB, fX, fY);
-	if (b & TB_R4)
-		jc |= codeToJc(g_back[1], fA, fB, fX, fY);
-	if (b & TB_L5)
-		jc |= codeToJc(g_back[2], fA, fB, fX, fY);
-	if (b & TB_R5)
-		jc |= codeToJc(g_back[3], fA, fB, fX, fY);
-	if (qam)
-		jc |= codeToJc(g_qamMap, fA, fB, fX, fY);
+	// Button field is the shared builder; timer/battery/sticks stay OpenPuck-local.
+	report_cfg_t cfg = { g_abSwap != 0,
+			     { g_back[0], g_back[1], g_back[2], g_back[3] },
+			     g_qamMap };
+	uint32_t jc = switch_pro_buttons(&g_in[bond], &cfg);
 	out[0] = g_jcTimer[slot]++;
 
 	// bat_con byte: [7:5]=capacity, bit4=charging, bit0=host_powered (see jcBatteryNibble). The controllers are
@@ -314,42 +191,8 @@ static void switchProBuild(uint8_t slot, uint8_t out[63])
 		jcBondOf(slot); // IMU data comes from the mapped controller
 	memset(out, 0, 63);
 	jcInputPrefix(slot, out);
-	// Gyro slot order follows hid-nintendo: raw+6 = ROLL, raw+8 = PITCH, raw+10 = YAW. Source routing (a proper
-	// rotation, det +1): SwitchX<-+gy, SwitchY<--gx, SwitchZ<-+gz.
-	//
-	// The accel MUST use the SAME signed permutation as the gyro. Steam reads the gyro raw and ignores this, but the
-	// Switch console FUSES accel (gravity) with gyro to anchor absolute orientation -- if the accel frame has the
-	// opposite handedness, the gravity-correction term points the wrong way and the attitude estimate latches into a
-	// rotated solution (intermittent ~45deg axis-mixing, per-unit roll bias, cleared only by a replug). So accel Y
-	// must be -ax to match the gyro's -gx pitch axis; resting gravity then lands cleanly on Switch Z (the up axis).
-	// The SC2 accelerometer is +/-2g full-scale (~16384 counts = 1g). The factory cal we present (sensitivity 0x4000)
-	// tells the Switch it's a genuine +/-8g Pro Controller (4096 counts = 1g), so divide by SW_ACCEL_DIV=4 to report
-	// ~1g. Without this the console reads gravity as ~4g, REJECTS the accel for drift correction (it must be linear
-	// accel, not gravity), and gyro roll error accumulates into a slow ~45deg lean. Gyro is left at native scale.
-	// accel X <- +ay, accel Y <- -ax, accel Z <- +az (signs match gyro)
-	int16_t aX = (int16_t)(g_in[bond].ay / SW_ACCEL_DIV);
-	int16_t aY = (int16_t)((-(int16_t)g_in[bond].ax) / SW_ACCEL_DIV);
-	int16_t aZ = (int16_t)(g_in[bond].az / SW_ACCEL_DIV);
-
-	// gyro outputs scaled by the user sensitivity factor
-	int16_t groll = gscale((int16_t)g_in[bond].gy);
-	int16_t gpitch = gscale((int16_t)(-(int16_t)g_in[bond].gx));
-	int16_t gyaw = gscale((int16_t)g_in[bond].gz);
-	for (int k = 0; k < 3; k++) {
-		int o = 12 + k * 12;
-		out[o + 0] = aX & 0xFF;
-		out[o + 1] = (aX >> 8) & 0xFF;
-		out[o + 2] = aY & 0xFF;
-		out[o + 3] = (aY >> 8) & 0xFF;
-		out[o + 4] = aZ & 0xFF;
-		out[o + 5] = (aZ >> 8) & 0xFF;
-		out[o + 6] = groll & 0xFF;
-		out[o + 7] = (groll >> 8) & 0xFF;
-		out[o + 8] = gpitch & 0xFF;
-		out[o + 9] = (gpitch >> 8) & 0xFF;
-		out[o + 10] = gyaw & 0xFF;
-		out[o + 11] = (gyaw >> 8) & 0xFF;
-	}
+	// IMU (accel/gyro permutation + user gyro scale) is the shared builder.
+	switch_pro_imu(&g_in[bond], g_swGyroScale10, out + 12);
 }
 // --- Canonical factory SPI dumps the host reads for calibration. Neutral IMU + centered sticks so a fresh
 // "device" calibrates sane; user-cal regions (0x80xx) read 0xFF so the host falls back to these factory blocks.
