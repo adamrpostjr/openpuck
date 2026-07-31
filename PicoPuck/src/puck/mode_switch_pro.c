@@ -13,16 +13,16 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 #include "puck/emu.h"
-#include "puck/gamepad_util.h"
+#include "gamepad_util.h"
 #include "puck/relay.h"
 #include "puck/slots.h"
 #include "sys/settings.h"
 #include "config/modes.h"
 
 #include <string.h>
-#include <math.h>
 #include "pico/time.h"
 #include "hid_reports.h"
+#include "hd_rumble.h"
 
 #define ET_SWITCH 1 // per-type config index (matches OpenPuck ET_SWITCH)
 #define SW_PRO_REPORT_MS 15u // 66 Hz
@@ -107,151 +107,25 @@ static void jc_mac(int slot, uint8_t out[6])
 static uint8_t g_jcTimer[PP_NSLOT];
 static uint8_t g_reportMode[PP_NSLOT]; // 0 until subcommand 0x03 selects 0x30
 
-// ---- HD-rumble amplitude decoder (see OpenPuck for the full protocol notes).
-enum { HDR_AMP_MIN = -256, HDR_AMP_OFF = -256 };
-static int16_t hdr_amp7(uint8_t code)
-{
-	if (code == 0)
-		return HDR_AMP_MIN;
-	if (code < 16)
-		return (int16_t)(8 * (int)code - 248);
-	if (code < 32)
-		return (int16_t)(2 * (int)code - 158);
-	return (int16_t)((int)code - 127);
-}
-static int16_t hdr_amp5(uint8_t code, int16_t cur)
-{
-	if (code == 0)
-		return HDR_AMP_OFF;
-	if (code <= 11)
-		return (int16_t)(-16 * (int)(code - 1));
-	int step = 0;
-	if (code >= 17 && code <= 19)
-		step = 4;
-	else if (code >= 20 && code <= 22)
-		step = 1;
-	else if (code >= 26 && code <= 28)
-		step = -1;
-	else if (code >= 29 && code <= 31)
-		step = -4;
-	int v = (int)cur + step;
-	return v < HDR_AMP_MIN ? HDR_AMP_MIN : (v > 0 ? 0 : (int16_t)v);
-}
-static uint16_t g_hdr_level[257];
-static bool g_hdr_built;
-static void hdr_build_levels(void)
-{
-	if (g_hdr_built)
-		return;
-	for (int u = HDR_AMP_MIN; u <= 0; u++) {
-		float lin = (float)u / 32.0f;
-		float amp = (lin >= -7.9375f) ? exp2f(lin) : 0.0f;
-		if (amp > 1.0f)
-			amp = 1.0f;
-		uint32_t v = (uint32_t)(amp * 65535.0f + 0.5f);
-		g_hdr_level[u - HDR_AMP_MIN] = (v > 0xFFFF) ? 0xFFFF :
-							      (uint16_t)v;
-	}
-	g_hdr_built = true;
-}
-// Running amplitudes per slot, per motor (0=L,1=R); packed 5-bit commands are
-// relative, so this must persist between frames — and be independent per pad.
-static int16_t g_band_lo[PP_NSLOT][2], g_band_hi[PP_NSLOT][2];
-static uint8_t hdr_field(uint32_t w, uint8_t shift, uint8_t width)
-{
-	return (uint8_t)((w >> shift) & ((1u << width) - 1u));
-}
-static uint16_t hdr_decode(int slot, uint8_t motor, const uint8_t b[4])
-{
-	int16_t *lo = &g_band_lo[slot][motor], *hi = &g_band_hi[slot][motor];
-	uint32_t w = (uint32_t)b[0] | ((uint32_t)b[1] << 8) |
-		     ((uint32_t)b[2] << 16) | ((uint32_t)b[3] << 24);
-	uint16_t peak = 0;
-#define HDR_SAMPLE()                                          \
-	do {                                                  \
-		uint16_t la = g_hdr_level[*lo - HDR_AMP_MIN]; \
-		uint16_t ha = g_hdr_level[*hi - HDR_AMP_MIN]; \
-		uint16_t lv = la > ha ? la : ha;              \
-		if (lv > peak)                                \
-			peak = lv;                            \
-	} while (0)
+// HD-rumble decoding lives in the shared module (common/hd_rumble.c),
+// byte-for-byte identical to OpenPuck. Per-slot, per-motor band state:
+static hdr_band_t g_bands[PP_NSLOT][2];
+static bool g_bands_init;
 
-	switch (hdr_field(w, 30, 2)) {
-	case 0:
-		HDR_SAMPLE();
-		break;
-	case 1:
-		if ((w & 0xFFFFF) == 0) {
-			*lo = hdr_amp5(hdr_field(w, 25, 5), *lo);
-			*hi = hdr_amp5(hdr_field(w, 20, 5), *hi);
-			HDR_SAMPLE();
-		} else if ((w & 0x3) == 0) {
-			*lo = hdr_amp7(hdr_field(w, 23, 7));
-			*hi = hdr_amp7(hdr_field(w, 9, 7));
-			HDR_SAMPLE();
-		} else {
-			bool want_hi = (w & 1) != 0;
-			bool is_freq = ((w >> 2) & 1) != 0;
-			if (!is_freq) {
-				if (want_hi)
-					*hi = hdr_amp7(hdr_field(w, 23, 7));
-				else
-					*lo = hdr_amp7(hdr_field(w, 23, 7));
-			}
-			HDR_SAMPLE();
-			*lo = hdr_amp5(hdr_field(w, 18, 5), *lo);
-			*hi = hdr_amp5(hdr_field(w, 13, 5), *hi);
-			HDR_SAMPLE();
-			*lo = hdr_amp5(hdr_field(w, 8, 5), *lo);
-			*hi = hdr_amp5(hdr_field(w, 3, 5), *hi);
-			HDR_SAMPLE();
-		}
-		break;
-	case 2:
-		if ((w & 0x3FF) == 0) {
-			*lo = hdr_amp5(hdr_field(w, 25, 5), *lo);
-			*hi = hdr_amp5(hdr_field(w, 20, 5), *hi);
-			HDR_SAMPLE();
-			*lo = hdr_amp5(hdr_field(w, 15, 5), *lo);
-			*hi = hdr_amp5(hdr_field(w, 10, 5), *hi);
-			HDR_SAMPLE();
-		} else {
-			if (w & 1) {
-				*hi = hdr_amp7(hdr_field(w, 23, 7));
-				*lo = hdr_amp5(hdr_field(w, 18, 5), *lo);
-			} else {
-				*lo = hdr_amp7(hdr_field(w, 23, 7));
-				*hi = hdr_amp5(hdr_field(w, 18, 5), *hi);
-			}
-			HDR_SAMPLE();
-			*lo = hdr_amp5(hdr_field(w, 13, 5), *lo);
-			*hi = hdr_amp5(hdr_field(w, 8, 5), *hi);
-			HDR_SAMPLE();
-		}
-		break;
-	case 3:
-		*lo = hdr_amp5(hdr_field(w, 25, 5), *lo);
-		*hi = hdr_amp5(hdr_field(w, 20, 5), *hi);
-		HDR_SAMPLE();
-		*lo = hdr_amp5(hdr_field(w, 15, 5), *lo);
-		*hi = hdr_amp5(hdr_field(w, 10, 5), *hi);
-		HDR_SAMPLE();
-		*lo = hdr_amp5(hdr_field(w, 5, 5), *lo);
-		*hi = hdr_amp5(hdr_field(w, 0, 5), *hi);
-		HDR_SAMPLE();
-		break;
-	}
-#undef HDR_SAMPLE
-	return peak;
-}
 static uint16_t g_jc_last_lo[PP_NSLOT], g_jc_last_hi[PP_NSLOT];
 static void jc_rumble(int slot, const uint8_t *p, uint16_t pn)
 {
 	if (pn < 9)
 		return; // [timer][left x4][right x4]
-	hdr_build_levels();
-	uint16_t lo = hdr_decode(slot, 0, p + 1),
-		 hi = hdr_decode(slot, 1, p + 5);
+	if (!g_bands_init) {
+		for (int i = 0; i < PP_NSLOT; i++) {
+			hdr_reset(&g_bands[i][0]);
+			hdr_reset(&g_bands[i][1]);
+		}
+		g_bands_init = true;
+	}
+	uint16_t lo = hdr_decode(&g_bands[slot][0], p + 1),
+		 hi = hdr_decode(&g_bands[slot][1], p + 5);
 	if (lo == g_jc_last_lo[slot] && hi == g_jc_last_hi[slot])
 		return; // Switch streams rumble every frame; relay only on change
 	g_jc_last_lo[slot] = lo;

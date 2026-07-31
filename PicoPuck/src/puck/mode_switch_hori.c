@@ -5,7 +5,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 #include "puck/emu.h"
-#include "puck/gamepad_util.h"
+#include "gamepad_util.h"
 #include "hid_reports.h"
 
 static uint16_t hori_build(int slot, uint8_t *out, uint8_t *rid)

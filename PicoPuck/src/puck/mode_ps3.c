@@ -10,7 +10,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 #include "puck/emu.h"
-#include "puck/gamepad_util.h"
+#include "gamepad_util.h"
 #include "puck/relay.h"
 #include <string.h>
 #include "hid_reports.h"

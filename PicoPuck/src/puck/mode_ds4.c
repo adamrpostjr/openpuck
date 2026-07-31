@@ -4,13 +4,15 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 #include "puck/emu.h"
-#include "puck/gamepad_util.h"
+#include "gamepad_util.h"
 #include "puck/relay.h"
+#include "sys/settings.h"
 #include <string.h>
 #include "hid_reports.h"
 
 #define DS4_TOUCH_H 942
 #define DS4_STATUS_USB 0x1B
+#define ET_DS4 2 // per-type config index (matches OpenPuck ET_DS4)
 
 static uint16_t ds4_build(int slot, uint8_t *out, uint8_t *rid)
 {
@@ -23,7 +25,8 @@ static uint16_t ds4_build(int slot, uint8_t *out, uint8_t *rid)
 	out[1] = sw_stick(g_in[slot].ly, true);
 	out[2] = sw_stick(g_in[slot].rx, false);
 	out[3] = sw_stick(g_in[slot].ry, true);
-	out[4] = ps_hat_nibble(b) | ps_face_nibble(b);
+	out[4] = ps_hat_nibble(b) |
+		 ps_face_nibble(b, settings()->type[ET_DS4].ab_swap);
 	out[5] = ps_shoulders_byte(b, g_in[slot].lt, g_in[slot].rt);
 	static uint8_t ctr;
 	out[6] = ((ctr++ & 0x0F) << 4) |

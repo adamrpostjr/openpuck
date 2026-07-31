@@ -47,7 +47,6 @@ target_sources(picopuck PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/puck/relay.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/puck/triton.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/puck/chord.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/puck/gamepad_util.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/puck/emu.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/puck/emu_present.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/puck/mode_switch_hori.c
@@ -67,6 +66,8 @@ target_sources(picopuck PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/bt/drv_ds4.c
     # Shared source of truth, compiled by BOTH firmwares (see ../OpenPuck/src/common).
     ${CMAKE_CURRENT_SOURCE_DIR}/../OpenPuck/src/common/hid_reports.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../OpenPuck/src/common/hd_rumble.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../OpenPuck/src/common/gamepad_util.c
 )
 
 target_include_directories(picopuck PRIVATE

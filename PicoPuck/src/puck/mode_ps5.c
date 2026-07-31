@@ -4,13 +4,15 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 #include "puck/emu.h"
-#include "puck/gamepad_util.h"
+#include "gamepad_util.h"
 #include "puck/relay.h"
+#include "sys/settings.h"
 #include <string.h>
 #include "hid_reports.h"
 
 #define PS5_TOUCH_H 1080
 #define PS5_STATUS_USB 0x1A
+#define ET_DS5 3 // per-type config index (matches OpenPuck ET_DS5)
 
 static uint16_t ps5_build(int slot, uint8_t *out, uint8_t *rid)
 {
@@ -27,7 +29,8 @@ static uint16_t ps5_build(int slot, uint8_t *out, uint8_t *rid)
 	out[5] = g_in[slot].rt;
 	static uint8_t seq;
 	out[6] = seq++;
-	out[7] = ps_hat_nibble(b) | ps_face_nibble(b);
+	out[7] = ps_hat_nibble(b) |
+		 ps_face_nibble(b, settings()->type[ET_DS5].ab_swap);
 	out[8] = ps_shoulders_byte(b, g_in[slot].lt, g_in[slot].rt);
 	out[9] = ((b & TB_STEAM) ? 0x01 : 0) |
 		 ((b & (TB_TOUCH | TB_LPADC | TB_RPADC)) ? 0x02 : 0) |
