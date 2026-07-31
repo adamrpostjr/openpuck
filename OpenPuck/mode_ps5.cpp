@@ -1,6 +1,7 @@
 #include "mode_ps5.h"
 #include "triton.h"
 #include "gamepad_util.h"
+#include "src/common/report_build.h"
 #include "config.h"
 #include "haptics.h"
 #include "bonds.h"
@@ -139,40 +140,12 @@ static ps5_setcb_t const PS5_SETCB[NSLOT] = { ps5Set0, ps5Set1, ps5Set2,
 // usbSlot drives the per-HID sequence counter; bond is the controller whose decoded input feeds the report.
 static void ps5Build(uint8_t usbSlot, uint8_t slot, uint8_t out[63])
 {
-	uint32_t b = psButtonsFromSteam(g_in[slot].buttons);
-	bool lTouch = (b & TB_LPADT) || (b & TB_LPADC),
-	     rTouch = (b & TB_RPADT) || (b & TB_RPADC);
-	memset(out, 0, 63);
-	out[0] = swStick(g_in[slot].lx, false);
-	out[1] = swStick(g_in[slot].ly, true);
-	out[2] = swStick(g_in[slot].rx, false);
-	out[3] = swStick(g_in[slot].ry, true);
-	out[4] = g_in[slot].lt;
-	out[5] = g_in[slot].rt;
-	static uint8_t seq[NSLOT] = { 0 };
-	out[6] = seq[usbSlot]++;
-	out[7] = psHatNibble(b) | psFaceNibble(b);
-	out[8] = psShouldersByte(b, g_in[slot].lt, g_in[slot].rt);
-	out[9] = ((b & TB_STEAM) ? 0x01 : 0) |
-		 ((b & TB_TOUCH || b & TB_LPADC || b & TB_RPADC) ? 0x02 : 0) |
-		 ((b & TB_MUTE) ? 0x04 : 0);
-	out[15] = g_in[slot].gx & 0xFF;
-	out[16] = g_in[slot].gx >> 8;
-	out[17] = g_in[slot].gz & 0xFF;
-	out[18] = g_in[slot].gz >> 8;
-	out[19] = (-g_in[slot].gy) & 0xFF;
-	out[20] = (-g_in[slot].gy) >> 8;
-	out[21] = g_in[slot].ax & 0xFF;
-	out[22] = g_in[slot].ax >> 8;
-	out[23] = g_in[slot].ay & 0xFF;
-	out[24] = g_in[slot].ay >> 8;
-	out[25] = g_in[slot].az & 0xFF;
-	out[26] = g_in[slot].az >> 8;
-	uint16_t lx, ly, rx, ry;
-	steamPadsToTouch(b, PS5_TOUCH_H, g_in[slot].lpx, g_in[slot].lpy,
-			 g_in[slot].rpx, g_in[slot].rpy, &lx, &ly, &rx, &ry);
-	touchPackPads(out + 32, lTouch, rTouch, lx, ly, rx, ry);
-	out[52] = PS5_STATUS_USB;
+	// Report layout is in the shared builder (src/common/report_build.c).
+	report_cfg_t cfg = { g_abSwap != 0,
+			     { g_back[0], g_back[1], g_back[2], g_back[3] },
+			     g_qamMap };
+	static report_seq_t seq[NSLOT];
+	build_ps5(&g_in[slot], &cfg, &seq[usbSlot], out);
 }
 
 // Dynamic-mount mode: begin() is unused (setup() calls beginPool()+usbReenumerate instead).

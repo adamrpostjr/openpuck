@@ -4,55 +4,25 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 #include "puck/emu.h"
-#include "gamepad_util.h"
 #include "puck/relay.h"
 #include "sys/settings.h"
 #include <string.h>
 #include "hid_reports.h"
+#include "report_build.h"
 
-#define PS5_TOUCH_H 1080
-#define PS5_STATUS_USB 0x1A
 #define ET_DS5 3 // per-type config index (matches OpenPuck ET_DS5)
 
+// Report layout is in the shared builder (common/report_build.c).
 static uint16_t ps5_build(int slot, uint8_t *out, uint8_t *rid)
 {
+	static report_seq_t seq[PP_NSLOT];
 	*rid = 0x01;
-	uint32_t b = g_in[slot].buttons;
-	bool lt_touch = (b & TB_LPADT) || (b & TB_LPADC);
-	bool rt_touch = (b & TB_RPADT) || (b & TB_RPADC);
-	memset(out, 0, 63);
-	out[0] = sw_stick(g_in[slot].lx, false);
-	out[1] = sw_stick(g_in[slot].ly, true);
-	out[2] = sw_stick(g_in[slot].rx, false);
-	out[3] = sw_stick(g_in[slot].ry, true);
-	out[4] = g_in[slot].lt;
-	out[5] = g_in[slot].rt;
-	static uint8_t seq;
-	out[6] = seq++;
-	out[7] = ps_hat_nibble(b) |
-		 ps_face_nibble(b, settings()->type[ET_DS5].ab_swap);
-	out[8] = ps_shoulders_byte(b, g_in[slot].lt, g_in[slot].rt);
-	out[9] = ((b & TB_STEAM) ? 0x01 : 0) |
-		 ((b & (TB_TOUCH | TB_LPADC | TB_RPADC)) ? 0x02 : 0) |
-		 ((b & TB_MUTE) ? 0x04 : 0);
-	out[15] = g_in[slot].gx & 0xFF;
-	out[16] = g_in[slot].gx >> 8;
-	out[17] = g_in[slot].gz & 0xFF;
-	out[18] = g_in[slot].gz >> 8;
-	out[19] = (-g_in[slot].gy) & 0xFF;
-	out[20] = (-g_in[slot].gy) >> 8;
-	out[21] = g_in[slot].ax & 0xFF;
-	out[22] = g_in[slot].ax >> 8;
-	out[23] = g_in[slot].ay & 0xFF;
-	out[24] = g_in[slot].ay >> 8;
-	out[25] = g_in[slot].az & 0xFF;
-	out[26] = g_in[slot].az >> 8;
-	uint16_t lx, ly, rx, ry;
-	steam_pads_to_touch(b, PS5_TOUCH_H, g_in[slot].lpx, g_in[slot].lpy,
-			    g_in[slot].rpx, g_in[slot].rpy, &lx, &ly, &rx, &ry);
-	touch_pack_pads(out + 32, lt_touch, rt_touch, lx, ly, rx, ry);
-	out[52] = PS5_STATUS_USB;
-	return 63;
+	const pp_type_cfg_t *t = &settings()->type[ET_DS5];
+	report_cfg_t cfg = { .ab_swap = t->ab_swap,
+			     .back = { t->back[0], t->back[1], t->back[2],
+				       t->back[3] },
+			     .qam = t->qam };
+	return build_ps5(&g_in[slot], &cfg, &seq[slot], out);
 }
 
 static uint16_t ps5_get(int slot, uint8_t rid, uint8_t type, uint8_t *buf,

@@ -12,16 +12,7 @@
 #include <stdint.h>
 #include "config/picopuck_config.h"
 #include "triton_masks.h" // shared TB_* button masks + SW_TRIG_ON + CHORD_BACK4
-
-// Decoded controller input, one per slot.
-typedef struct {
-	uint32_t buttons; // TB_* bits
-	int16_t lx, ly, rx, ry; // sticks, center 0
-	uint8_t lt, rt; // triggers 0..255
-	int16_t lpx, lpy, rpx, rpy; // trackpads (SC2 only; 0 for generic pads)
-	int16_t ax, ay, az; // accelerometer (0 if none)
-	int16_t gx, gy, gz; // gyroscope (0 if none)
-} puck_input_t;
+#include "triton_input.h" // shared canonical input struct (puck_input_t)
 
 extern puck_input_t g_in[PP_NSLOT];
 

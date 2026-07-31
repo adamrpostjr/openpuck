@@ -10,10 +10,11 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 #include "puck/emu.h"
-#include "gamepad_util.h"
 #include "puck/relay.h"
+#include "sys/settings.h"
 #include <string.h>
 #include "hid_reports.h"
+#include "report_build.h"
 
 // Genuine Sixaxis / DualShock 3 HID report descriptor (148 bytes, verbatim from
 // real hardware). The console does not parse this to drive input — it matches by
@@ -116,73 +117,19 @@ static void ds3_set(int slot, uint8_t rid, uint8_t type, const uint8_t *b,
 	puck_rumble(slot, (uint16_t)p[4] * 257u, p[2] ? 0xFFFFu : 0u);
 }
 
-// SC2 IMU int16 (center 0) → DS3 10-bit unsigned (center 511), little-endian.
-static void ds3_imu(uint8_t *out, int16_t v)
-{
-	int32_t e = 511 + ((int32_t)v >> 6);
-	if (e < 0)
-		e = 0;
-	if (e > 1023)
-		e = 1023;
-	out[0] = (uint8_t)(e & 0xFF);
-	out[1] = (uint8_t)((e >> 8) & 0xFF);
-}
-
-// Build the 48-byte input payload (id 0x01 prepended by the stack → 49-byte
-// Sixaxis report). Offsets are the genuine report's rd[] minus one.
+// Input-report layout is in the shared builder (common/report_build.c). PS3 has
+// no dedicated per-type config; it reuses the DS4 DualShock config (back paddles
+// / QAM / A-B swap).
+#define ET_DS4 2
 static uint16_t ds3_build(int slot, uint8_t *out, uint8_t *rid)
 {
 	*rid = 0x01;
-	uint32_t b = g_in[slot].buttons;
-	bool l2 = (g_in[slot].lt > SW_TRIG_ON) || (b & TB_L2);
-	bool r2 = (g_in[slot].rt > SW_TRIG_ON) || (b & TB_R2);
-	memset(out, 0, 48);
-
-	// out[1]: Select L3 R3 Start Up Right Down Left. SC2 View→Start, Menu→Select
-	// (matches the physical button positions on the puck).
-	out[1] = ((b & TB_MENU) ? 0x01 : 0) | ((b & TB_L3) ? 0x02 : 0) |
-		 ((b & TB_R3) ? 0x04 : 0) | ((b & TB_VIEW) ? 0x08 : 0) |
-		 ((b & TB_DUP) ? 0x10 : 0) | ((b & TB_DRT) ? 0x20 : 0) |
-		 ((b & TB_DDN) ? 0x40 : 0) | ((b & TB_DLF) ? 0x80 : 0);
-
-	// out[2]: L2 R2 L1 R1 Triangle Circle Cross Square.
-	uint8_t tri = (b & TB_Y) ? 0x10 : 0;
-	uint8_t cir = (b & TB_B) ? 0x20 : 0;
-	uint8_t crs = (b & TB_A) ? 0x40 : 0;
-	uint8_t sqr = (b & TB_X) ? 0x80 : 0;
-	out[2] = (l2 ? 0x01 : 0) | (r2 ? 0x02 : 0) | ((b & TB_LB) ? 0x04 : 0) |
-		 ((b & TB_RB) ? 0x08 : 0) | tri | cir | crs | sqr;
-
-	out[3] = (b & TB_STEAM) ? 0x01 : 0; // PS button
-
-	out[5] = sw_stick(g_in[slot].lx, false);
-	out[6] = sw_stick(g_in[slot].ly, true);
-	out[7] = sw_stick(g_in[slot].rx, false);
-	out[8] = sw_stick(g_in[slot].ry, true);
-
-	// out[13..24]: analog pressures Up Right Down Left L2 R2 L1 R1 Tri Cir Crs Sqr.
-	out[13] = (b & TB_DUP) ? 0xFF : 0;
-	out[14] = (b & TB_DRT) ? 0xFF : 0;
-	out[15] = (b & TB_DDN) ? 0xFF : 0;
-	out[16] = (b & TB_DLF) ? 0xFF : 0;
-	out[17] = g_in[slot].lt;
-	out[18] = g_in[slot].rt;
-	out[19] = (b & TB_LB) ? 0xFF : 0;
-	out[20] = (b & TB_RB) ? 0xFF : 0;
-	out[21] = tri ? 0xFF : 0;
-	out[22] = cir ? 0xFF : 0;
-	out[23] = crs ? 0xFF : 0;
-	out[24] = sqr ? 0xFF : 0;
-
-	out[28] = 0x00;
-	out[29] = 0x05; // battery level: full (cosmetic over USB)
-
-	// out[40..47]: accel X, accel Z, accel Y, gyro Z — each 10-bit LE, center 511.
-	ds3_imu(out + 40, g_in[slot].ax);
-	ds3_imu(out + 42, g_in[slot].az);
-	ds3_imu(out + 44, g_in[slot].ay);
-	ds3_imu(out + 46, g_in[slot].gz);
-	return 48;
+	const pp_type_cfg_t *t = &settings()->type[ET_DS4];
+	report_cfg_t cfg = { .ab_swap = t->ab_swap,
+			     .back = { t->back[0], t->back[1], t->back[2],
+				       t->back[3] },
+			     .qam = t->qam };
+	return build_ds3(&g_in[slot], &cfg, out);
 }
 
 const emu_mode_t emu_ps3 = {

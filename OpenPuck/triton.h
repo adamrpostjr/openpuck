@@ -39,15 +39,9 @@ void imuFrom45(const uint8_t *r, int16_t *ax, int16_t *ay, int16_t *az,
 // ---- shared decoded input (filled by rf_link.cpp once per fresh report 0x45, read by every mode) ----
 // One PuckInput per bond slot: each controller in a multi-slot puck has its own decoded input. The stream
 // modes (Switch, PS5, DS4) read g_in[s] for each active slot in their task() loop; the puck/lizard mode reads
-// g_in[slot] inside onReport45/onAuxReport to forward to hid[slot].
-struct PuckInput {
-	// raw Triton buttons (TB_*); per-mode builders apply their own chord masking
-	uint32_t buttons;
-	int16_t lx, ly, rx, ry; // sticks (int16, center 0)
-	uint8_t lt, rt; // triggers scaled 0..255 (trigU8)
-	int16_t lpx, lpy, rpx, rpy; // left / right trackpad coords (int16)
-	int16_t ax, ay, az; // accelerometer
-	int16_t gx, gy, gz; // gyroscope
-};
+// g_in[slot] inside onReport45/onAuxReport to forward to hid[slot]. The struct itself is the shared canonical
+// input (src/common/triton_input.h); PuckInput is OpenPuck's historical alias for it.
+#include "src/common/triton_input.h"
+typedef puck_input_t PuckInput;
 #include "bonds.h" // NSLOT
 extern PuckInput g_in[NSLOT];

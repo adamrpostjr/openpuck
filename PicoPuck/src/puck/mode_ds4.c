@@ -4,63 +4,32 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 #include "puck/emu.h"
-#include "gamepad_util.h"
 #include "puck/relay.h"
 #include "sys/settings.h"
 #include <string.h>
 #include "hid_reports.h"
+#include "report_build.h"
 
-#define DS4_TOUCH_H 942
-#define DS4_STATUS_USB 0x1B
 #define ET_DS4 2 // per-type config index (matches OpenPuck ET_DS4)
+
+// The DS4 report layout lives in the shared builder (common/report_build.c); here
+// we only fill the remap config from settings and hold the per-slot seq state.
+static report_cfg_t ds4_cfg(void)
+{
+	const pp_type_cfg_t *t = &settings()->type[ET_DS4];
+	report_cfg_t c = { .ab_swap = t->ab_swap,
+			   .back = { t->back[0], t->back[1], t->back[2],
+				     t->back[3] },
+			   .qam = t->qam };
+	return c;
+}
 
 static uint16_t ds4_build(int slot, uint8_t *out, uint8_t *rid)
 {
+	static report_seq_t seq[PP_NSLOT];
 	*rid = 0x01;
-	uint32_t b = g_in[slot].buttons;
-	bool lt_touch = (b & TB_LPADT) || (b & TB_LPADC);
-	bool rt_touch = (b & TB_RPADT) || (b & TB_RPADC);
-	memset(out, 0, 63);
-	out[0] = sw_stick(g_in[slot].lx, false);
-	out[1] = sw_stick(g_in[slot].ly, true);
-	out[2] = sw_stick(g_in[slot].rx, false);
-	out[3] = sw_stick(g_in[slot].ry, true);
-	out[4] = ps_hat_nibble(b) |
-		 ps_face_nibble(b, settings()->type[ET_DS4].ab_swap);
-	out[5] = ps_shoulders_byte(b, g_in[slot].lt, g_in[slot].rt);
-	static uint8_t ctr;
-	out[6] = ((ctr++ & 0x0F) << 4) |
-		 ((b & (TB_TOUCH | TB_LPADC | TB_RPADC)) ? 0x02 : 0) |
-		 ((b & TB_STEAM) ? 0x01 : 0);
-	out[7] = g_in[slot].lt;
-	out[8] = g_in[slot].rt;
-	out[12] = g_in[slot].gx & 0xFF;
-	out[13] = g_in[slot].gx >> 8;
-	out[14] = g_in[slot].gz & 0xFF;
-	out[15] = g_in[slot].gz >> 8;
-	out[16] = (-g_in[slot].gy) & 0xFF;
-	out[17] = (-g_in[slot].gy) >> 8;
-	out[18] = g_in[slot].ax & 0xFF;
-	out[19] = g_in[slot].ax >> 8;
-	out[20] = g_in[slot].ay & 0xFF;
-	out[21] = g_in[slot].ay >> 8;
-	out[22] = g_in[slot].az & 0xFF;
-	out[23] = g_in[slot].az >> 8;
-	out[29] = DS4_STATUS_USB;
-	if (lt_touch || rt_touch) {
-		uint16_t lx, ly, rx, ry;
-		steam_pads_to_touch(b, DS4_TOUCH_H, g_in[slot].lpx,
-				    g_in[slot].lpy, g_in[slot].rpx,
-				    g_in[slot].rpy, &lx, &ly, &rx, &ry);
-		static uint8_t tstamp;
-		out[32] = 1;
-		out[33] = tstamp++;
-		touch_pack_pads(out + 34, lt_touch, rt_touch, lx, ly, rx, ry);
-	} else {
-		out[32] = 0;
-		touch_pack_pads(out + 34, false, false, 0, 0, 0, 0);
-	}
-	return 63;
+	report_cfg_t cfg = ds4_cfg();
+	return build_ds4(&g_in[slot], &cfg, &seq[slot], out);
 }
 
 static uint16_t ds4_get(int slot, uint8_t rid, uint8_t type, uint8_t *buf,

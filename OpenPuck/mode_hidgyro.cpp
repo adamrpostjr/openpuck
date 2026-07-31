@@ -1,6 +1,7 @@
 #include "mode_hidgyro.h"
 #include "triton.h"
 #include "gamepad_util.h"
+#include "src/common/report_build.h"
 #include "config.h"
 #include "haptics.h"
 #include "bonds.h"
@@ -131,50 +132,13 @@ static ds4_setcb_t const DS4_SETCB[NSLOT] = { hidGyroSet0, hidGyroSet1,
 // usbSlot drives the per-HID counters; slot (bond) is the controller whose decoded input feeds the report.
 static void hidGyroBuild(uint8_t usbSlot, uint8_t slot, uint8_t out[63])
 {
-	uint32_t b = psButtonsFromSteam(g_in[slot].buttons);
-	bool lTouch = (b & TB_LPADT) || (b & TB_LPADC),
-	     rTouch = (b & TB_RPADT) || (b & TB_RPADC);
-	memset(out, 0, 63);
-	out[0] = swStick(g_in[slot].lx, false);
-	out[1] = swStick(g_in[slot].ly, true);
-	out[2] = swStick(g_in[slot].rx, false);
-	out[3] = swStick(g_in[slot].ry, true);
-	out[4] = psHatNibble(b) | psFaceNibble(b);
-	out[5] = psShouldersByte(b, g_in[slot].lt, g_in[slot].rt);
-	static uint8_t ctr[NSLOT] = { 0 };
-	out[6] = ((ctr[usbSlot]++ & 0x0F) << 4) |
-		 ((b & TB_TOUCH || b & TB_LPADC || b & TB_RPADC) ? 0x02 : 0) |
-		 ((b & TB_STEAM) ? 0x01 : 0);
-	out[7] = g_in[slot].lt;
-	out[8] = g_in[slot].rt;
-	out[12] = g_in[slot].gx & 0xFF;
-	out[13] = g_in[slot].gx >> 8;
-	out[14] = g_in[slot].gz & 0xFF;
-	out[15] = g_in[slot].gz >> 8;
-	out[16] = (-g_in[slot].gy) & 0xFF;
-	out[17] = (-g_in[slot].gy) >> 8;
-	out[18] = g_in[slot].ax & 0xFF;
-	out[19] = g_in[slot].ax >> 8;
-	out[20] = g_in[slot].ay & 0xFF;
-	out[21] = g_in[slot].ay >> 8;
-	out[22] = g_in[slot].az & 0xFF;
-	out[23] = g_in[slot].az >> 8;
-	out[29] = DS4_STATUS_USB;
-	if (lTouch || rTouch) {
-		uint16_t lx, ly, rx, ry;
-		steamPadsToTouch(b, DS4_TOUCH_H, g_in[slot].lpx, g_in[slot].lpy,
-				 g_in[slot].rpx, g_in[slot].rpy, &lx, &ly, &rx,
-				 &ry);
-		static uint8_t tstamp[NSLOT] = { 0 };
-		out[32] = 1;
-		out[33] = tstamp[usbSlot]++;
-		touchPackPads(out + 34, lTouch, rTouch, lx, ly, rx, ry);
-	} else {
-		out[32] = 0;
-		touchPackPads(
-			out + 34, false, false, 0, 0, 0,
-			0); // contact 0x80 -- memset(0) reads as touch @0,0
-	}
+	// Report layout is in the shared builder (src/common/report_build.c); fill
+	// the remap config from OpenPuck's active-type globals + per-usbSlot seq.
+	report_cfg_t cfg = { g_abSwap != 0,
+			     { g_back[0], g_back[1], g_back[2], g_back[3] },
+			     g_qamMap };
+	static report_seq_t seq[NSLOT];
+	build_ds4(&g_in[slot], &cfg, &seq[usbSlot], out);
 }
 
 // Dynamic-mount mode: begin() is unused (setup() calls beginPool()+usbReenumerate instead).

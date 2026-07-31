@@ -1,6 +1,7 @@
 #include "mode_ps3.h"
 #include "triton.h"
 #include "gamepad_util.h"
+#include "src/common/report_build.h"
 #include "config.h"
 #include "haptics.h"
 #include "bonds.h"
@@ -172,98 +173,27 @@ static void ds3SetReport(uint8_t rid, hid_report_type_t type, uint8_t const *b,
 // SC2 IMU int16 (center 0) -> DS3 10-bit unsigned (center 511), little-endian on the wire (low byte first).
 // >>6 maps the full int16 swing onto roughly +/-512 around center; the PS3 applies its own calibration so
 // exact scale is not critical. Writes 2 bytes at out[0..1].
-static void ds3Imu(uint8_t *out, int16_t v)
-{
-	int32_t e = 511 + ((int32_t)v >> 6);
-	if (e < 0)
-		e = 0;
-	if (e > 1023)
-		e = 1023;
-	out[0] = (uint8_t)(e & 0xFF);
-	out[1] = (uint8_t)((e >> 8) & 0xFF);
-}
 
 // Build the 48-byte input-report PAYLOAD (the stack prepends report id 0x01 -> 49-byte Sixaxis report).
 // Offsets are the genuine report's rd[] minus one (rd[0] is the prepended id).
 static void ds3Build(uint8_t slot, uint8_t out[48])
 {
-	uint32_t b = psButtonsFromSteam(g_in[slot].buttons);
-	bool l2 = (g_in[slot].lt > SW_TRIG_ON) || (b & TB_L2);
-	bool r2 = (g_in[slot].rt > SW_TRIG_ON) || (b & TB_R2);
-	memset(out, 0, 48);
-
-	// out[0] reserved (rd[1]); if it were 0xFF the kernel/console would drop the report -- keep 0.
-
-	// out[1] (rd[2]): Select(bit0) L3 R3 Start(bit3) Up Right Down Left.
-	// SC2 View -> Start, Menu -> Select: matches the physical button positions on the puck/controller (the
-	// opposite of the PS5/DS4 Create/Options convention, which read reversed on the DS3 in testing).
-	out[1] = ((b & TB_MENU) ? 0x01 : 0) | ((b & TB_L3) ? 0x02 : 0) |
-		 ((b & TB_R3) ? 0x04 : 0) | ((b & TB_VIEW) ? 0x08 : 0) |
-		 ((b & TB_DUP) ? 0x10 : 0) | ((b & TB_DRT) ? 0x20 : 0) |
-		 ((b & TB_DDN) ? 0x40 : 0) | ((b & TB_DLF) ? 0x80 : 0);
-
-	// out[2] (rd[3]): L2 R2 L1 R1 Triangle Circle Cross Square. g_abSwap swaps the A/B + X/Y face pair.
-	uint8_t tri, cir, crs, sqr;
-	if (g_abSwap) {
-		tri = (b & TB_A) ? 0x10 : 0;
-		cir = (b & TB_B) ? 0x20 : 0;
-		crs = (b & TB_X) ? 0x40 : 0;
-		sqr = (b & TB_Y) ? 0x80 : 0;
-	} else {
-		tri = (b & TB_Y) ? 0x10 : 0;
-		cir = (b & TB_B) ? 0x20 : 0;
-		crs = (b & TB_A) ? 0x40 : 0;
-		sqr = (b & TB_X) ? 0x80 : 0;
-	}
-	out[2] = (l2 ? 0x01 : 0) | (r2 ? 0x02 : 0) | ((b & TB_LB) ? 0x04 : 0) |
-		 ((b & TB_RB) ? 0x08 : 0) | tri | cir | crs | sqr;
-
-	// out[3] (rd[4]): PS button
-	out[3] = (b & TB_STEAM) ? 0x01 : 0;
-
-	// out[5..8] (rd[6..9]): LX LY RX RY, center 0x80
-	out[5] = swStick(g_in[slot].lx, false);
-	out[6] = swStick(g_in[slot].ly, true);
-	out[7] = swStick(g_in[slot].rx, false);
-	out[8] = swStick(g_in[slot].ry, true);
-
-	// out[13..24] (rd[14..25]): analog pressures, order Up Right Down Left L2 R2 L1 R1 Tri Cir Cross Square
-	out[13] = (b & TB_DUP) ? 0xFF : 0;
-	out[14] = (b & TB_DRT) ? 0xFF : 0;
-	out[15] = (b & TB_DDN) ? 0xFF : 0;
-	out[16] = (b & TB_DLF) ? 0xFF : 0;
-	out[17] = g_in[slot].lt;
-	out[18] = g_in[slot].rt;
-	out[19] = (b & TB_LB) ? 0xFF : 0;
-	out[20] = (b & TB_RB) ? 0xFF : 0;
-	out[21] = tri ? 0xFF : 0;
-	out[22] = cir ? 0xFF : 0;
-	out[23] = crs ? 0xFF : 0;
-	out[24] = sqr ? 0xFF : 0;
-
-	// out[28..29] (rd[29..30]): connection/charge status. Battery "full"; cosmetic on the PS3 over USB
-	// (the console knows it's wired from enumeration, not this byte).
-	out[28] = 0x00;
-	out[29] = 0x05; // battery level: full
-
-	// out[40..47] (rd[41..48]): accel X, accel Z, accel Y, gyro Z -- each 10-bit LE, center 511.
-	ds3Imu(out + 40, g_in[slot].ax);
-	ds3Imu(out + 42, g_in[slot].az);
-	ds3Imu(out + 44, g_in[slot].ay);
-	ds3Imu(out + 46, g_in[slot].gz);
+	// Report layout is in the shared builder (src/common/report_build.c).
+	report_cfg_t cfg = { g_abSwap != 0,
+			     { g_back[0], g_back[1], g_back[2], g_back[3] },
+			     g_qamMap };
+	build_ds3(&g_in[slot], &cfg, out);
 }
 
 // Neutral input report: centered sticks + IMU, no buttons. Streamed when no controller is linked so the PS3
 // keeps the Sixaxis "alive" (and a games/XMB controller slot) instead of seeing a silent endpoint.
 static void ds3Neutral(uint8_t out[48])
 {
-	memset(out, 0, 48);
-	out[5] = out[6] = out[7] = out[8] = 0x80; // sticks centered
-	out[29] = 0x05; // battery full
-	ds3Imu(out + 40, 0);
-	ds3Imu(out + 42, 0);
-	ds3Imu(out + 44, 0);
-	ds3Imu(out + 46, 0);
+	// A zeroed input through the shared builder IS the neutral report (centered
+	// sticks + IMU, no buttons, battery full).
+	puck_input_t neutral = { 0 };
+	report_cfg_t cfg = { false, { 0, 0, 0, 0 }, 0 };
+	build_ds3(&neutral, &cfg, out);
 }
 
 void Ps3Controller::usbIdentity()
