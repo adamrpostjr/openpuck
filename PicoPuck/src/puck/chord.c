@@ -15,12 +15,6 @@
 #include "pico/stdlib.h"
 #include "hardware/watchdog.h"
 
-// Face → target mode (A always Steam). Mirrors OpenPuck's chordBtn idea, but the
-// defaults point at PicoPuck's implemented emulated modes.
-#define CHORD_B MODE_PS5
-#define CHORD_X MODE_HIDGYRO
-#define CHORD_Y MODE_SW_HORI
-
 static void mode_switch_reboot(uint8_t mode)
 {
 	settings_set_mode(mode);
@@ -41,14 +35,21 @@ void chord_note(int slot)
 	if (((b & back4) != back4) && ((b & trig) != trig))
 		return;
 
+	// Face → target mode: A is always Steam; B/X/Y come from the configurable
+	// chord table (settings, panel-editable) — same as OpenPuck's g_chordBtn[].
+	const pp_cfg_t *c = settings();
 	uint8_t want = 0xFF;
-	if (b & TB_A) want = MODE_STEAM;
-	else if (b & TB_B) want = CHORD_B;
-	else if (b & TB_X) want = CHORD_X;
-	else if (b & TB_Y) want = CHORD_Y;
+	if (b & TB_A)
+		want = MODE_STEAM;
+	else if (b & TB_B)
+		want = c->chord[0];
+	else if (b & TB_X)
+		want = c->chord[1];
+	else if (b & TB_Y)
+		want = c->chord[2];
 
 	if (want == 0xFF || want == settings_mode())
-		return;  // guard held but no (new) target picked → pass through
+		return; // guard held but no (new) target picked → pass through
 
-	mode_switch_reboot(want);  // deliberate combo → switch immediately
+	mode_switch_reboot(want); // deliberate combo → switch immediately
 }

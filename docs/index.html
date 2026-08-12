@@ -1223,6 +1223,50 @@ function applyBtFrame(p){
   }
   $("#ppState").textContent = (scanActive ? "scanning for controllers…" : "idle") + diag;
   $("#ppScanBtn").textContent = scanActive ? "Stop" : "Scan";
+  // Device log tail (frame v2+): two length-prefixed latin1 sections —
+  // [charlen][chars] (frozen GATT characteristic dump) then [loglen][haptics]
+  // (rolling). Surfaced here because PicoPuck's stdio is UART-only.
+  const dec=a=>new TextDecoder("latin1").decode(new Uint8Array(a));
+  let off=dg+6, chars="", haps="";
+  if(p.length>=off+2){
+    const cl=p[off]|(p[off+1]<<8); off+=2;
+    if(p.length>=off+cl){ chars=dec(p.slice(off,off+cl)); off+=cl; }
+    if(p.length>=off+2){ const hl=p[off]|(p[off+1]<<8); off+=2;
+      if(p.length>=off+hl) haps=dec(p.slice(off,off+hl)); }
+    ppShowDevLog((chars?"== characteristics ==\n"+chars:"")+(haps?"== haptics ==\n"+haps:""));
+  }
+}
+// Render the device log window into #ppDevLog (created lazily under the pairing
+// card). Only touch the DOM when the text changes so the 600 ms poll doesn't
+// fight text selection / copy.
+let ppDevLogLast="";
+function ppShowDevLog(txt){
+  if(txt===ppDevLogLast) return; ppDevLogLast=txt;
+  let el=$("#ppDevLog");
+  if(!el){
+    const host=$("#ppState")?.closest(".card")||document.body;
+    const wrap=document.createElement("div"); wrap.style.cssText="margin-top:10px";
+    wrap.innerHTML='<div class="row" style="align-items:center;gap:8px;margin-bottom:4px">'
+      +'<strong style="font-size:12px">Device log</strong>'
+      +'<button id="ppDevLogCopy" class="btn" style="padding:2px 8px;font-size:11px">Copy</button>'
+      +'<button id="ppHapTest" class="btn" style="padding:2px 8px;font-size:11px">Test rumble ▶</button>'
+      +'<span id="ppHapV" style="font-size:11px;opacity:.7"></span></div>'
+      +'<pre id="ppDevLog" style="max-height:200px;overflow:auto;background:#111;color:#0f0;'
+      +'font:11px/1.4 monospace;padding:8px;border-radius:6px;white-space:pre-wrap;margin:0"></pre>';
+    host.appendChild(wrap);
+    el=$("#ppDevLog");
+    $("#ppDevLogCopy").onclick=()=>navigator.clipboard?.writeText($("#ppDevLog").textContent||"");
+    // Haptic-target bisector: each press fires a strong test rumble at the next
+    // (characteristic, framing) combo. Watch the SC2 — when it buzzes, the "TEST
+    // v=… ch=… fr=…" line in the log names the winning combo.
+    window.ppHapV=0;
+    $("#ppHapTest").onclick=async()=>{
+      const v=window.ppHapV++ & 0xFF;
+      $("#ppHapV").textContent="variant "+v;
+      try{ await ppBtCommand([0x1A, v]); }catch(e){ log("haptic test err: "+e.message); }
+    };
+  }
+  el.textContent=txt;
 }
 function renderPicoPuckSlots(slots){
   const el=$("#ppSlots"); if(!el) return;

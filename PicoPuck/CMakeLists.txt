@@ -56,6 +56,7 @@ target_sources(picopuck PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/puck/mode_switch_pro.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/puck/xinput.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/sys/settings.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/sys/pplog.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/bt/bt_control_stub.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/bt/bt_host.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/bt/bt_valve.c

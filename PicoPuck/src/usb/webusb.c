@@ -15,6 +15,7 @@
 #include "puck/relay.h"
 #include "puck/personality.h"
 #include "sys/settings.h"
+#include "sys/pplog.h"
 #include "bt/bt_control.h"
 
 #include <string.h>
@@ -26,6 +27,7 @@
 // TinyUSB translation unit).
 extern volatile uint16_t g_valve_writes;
 uint8_t bt_report_count(int slot);
+void bt_test_haptic(uint8_t variant);  // haptic-target bisector (bt_valve.c)
 
 #define WB_VER 17
 #define WB_PAYLEN 180
@@ -117,12 +119,14 @@ static void send_blob(void)
 #define BT_SCAN_MAX 10
 static void send_bt_frame(void)
 {
-	uint8_t f[3 + 3 + PP_NSLOT * BT_SLOT_REC + 1 + BT_SCAN_MAX * BT_SCAN_REC + 8];
+	// Sized to the vendor TX FIFO (512 B) so the appended log tail can use
+	// whatever room the pairing payload leaves without overrunning the FIFO.
+	uint8_t f[512];
 	uint8_t *p = f;
 	*p++ = 0xAD;
 	uint8_t *plen = p; p += 2;   // 16-bit LE length, backfilled below
 	uint8_t *start = p;
-	*p++ = 1;             // frame version
+	*p++ = 2;             // frame version (2 = log tail present)
 	*p++ = PP_BOARD;
 	*p++ = bt_scan_active() ? 1 : 0;
 
@@ -182,6 +186,25 @@ static void send_bt_frame(void)
 	*p++ = flags; *p++ = hci;
 	*p++ = (uint8_t)(g_valve_writes & 0xFF); *p++ = (uint8_t)(g_valve_writes >> 8);
 
+	// Two length-prefixed log sections: [charlen][chars][loglen][haptics]. The
+	// characteristic dump goes first with priority (it's the datum we need and
+	// must not be evicted by haptic spam); the rolling haptic log fills whatever
+	// room is left. Whole frame capped at 500 B: below the 512-B FIFO AND not a
+	// multiple of the 64-B bulk packet, so the transfer always ends on a short
+	// packet (an exactly-512 frame has no terminating short packet → host stalls).
+	{
+		uint16_t used = (uint16_t)(p - f) + 4; // two length prefixes
+		uint16_t room = used < 500 ? (uint16_t)(500 - used) : 0;
+		uint8_t *clen = p; p += 2;
+		uint16_t cn = pplog_chars_snapshot(p, room);
+		p += cn; room = (uint16_t)(room - cn);
+		clen[0] = (uint8_t)(cn & 0xFF); clen[1] = (uint8_t)(cn >> 8);
+		uint8_t *llen = p; p += 2;
+		uint16_t ln = pplog_snapshot(p, room);
+		p += ln;
+		llen[0] = (uint8_t)(ln & 0xFF); llen[1] = (uint8_t)(ln >> 8);
+	}
+
 	uint16_t pl = (uint16_t)(p - start);
 	plen[0] = (uint8_t)(pl & 0xFF); plen[1] = (uint8_t)(pl >> 8);
 	send_frame(f, (uint16_t)(p - f));
@@ -197,7 +220,7 @@ static uint8_t opcode_len(uint8_t op)
 		return 1;
 	case 0x02: return 3;
 	case 0x03: case 0x05: case 0x0E: case 0x0F: case 0x10: case 0x13:
-	case 0x16:
+	case 0x16: case 0x1A:
 		return 2;
 	case 0x0A: return 4;
 	case 0x25: return 5;
@@ -241,6 +264,7 @@ static void dispatch(const uint8_t *c)
 	case 0x17: bt_pair(&c[1], c[7]); break;
 	case 0x18: bt_forget(&c[1], c[7]); break;
 	case 0x19: send_bt_frame(); break;
+	case 0x1A: bt_test_haptic(c[1]); break;  // haptic-target bisector
 	default: break;  // stubs (0x07/0x09/0x0D/0x0E/0x0F/0x10/0x11-0x15/0x20-0x25)
 	}
 }
