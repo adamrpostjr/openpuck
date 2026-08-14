@@ -42,10 +42,10 @@ int main(void)
 	bool puck = mode_is_puck(settings_mode());
 	bool xinput = mode_is_xinput(settings_mode());
 
-	// HID emulated modes present one gamepad per CONNECTED controller, mounted /
-	// unmounted dynamically (no reboot) — same behaviour as OpenPuck. Puck and
-	// XInput modes keep their fixed interface layout.
-	if (!puck && !xinput)
+	// HID emulated modes AND XInput present one gamepad per CONNECTED controller,
+	// mounted / unmounted dynamically (no reboot) — same behaviour as OpenPuck, so
+	// two controllers show up as two pads. Only puck mode keeps a fixed layout.
+	if (!puck)
 		usb_mount_enable(true, PP_NSLOT);
 
 	// The user LED hangs off the CYW43 chip; this init also hands the radio to

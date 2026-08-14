@@ -135,25 +135,29 @@ static uint16_t build_emu_config(uint8_t *b, const emu_mode_t *emu, uint8_t nif)
 }
 
 // Build the XInput config: the WebUSB vendor interface FIRST (itf 0), so the
-// built-in vendor class driver claims it and — with only one vendor instance —
-// leaves the XInput interface (itf 1, class 0xFF/0x5D/0x01) for the custom
-// XInput app driver. Endpoints: vendor bulk 0x02/0x82; XInput interrupt IN
-// 0x83 / OUT 0x03. Returns total length.
-static uint16_t build_xinput_config(uint8_t *b)
+// built-in vendor class driver claims it, then `k` XInput interfaces (itf 1..k,
+// class 0xFF/0x5D/0x01) — ONE Xbox-360-wired pad per CONNECTED controller, so
+// multiple controllers each show up on the OS (matches OpenPuck's dynamic XInput
+// mounting; the old build presented a single fixed pad → only one controller
+// ever appeared). Endpoints: vendor bulk 0x02/0x82; XInput pad j uses endpoint
+// number 3+j (interrupt IN 0x83+j / OUT 0x03+j). Returns total length.
+static uint16_t build_xinput_config(uint8_t *b, uint8_t k)
 {
-	const uint16_t total = 9 + (9 + 7 + 7) + (9 + 17 + 7 + 7); // 72
+	if (k > PP_NSLOT)
+		k = PP_NSLOT;
+	const uint16_t total = 9 + (9 + 7 + 7) + k * (9 + 17 + 7 + 7);
 	uint8_t *p = b;
-	// configuration (2 interfaces)
+	// configuration (vendor + k pad interfaces)
 	*p++ = 9;
 	*p++ = TUSB_DESC_CONFIGURATION;
 	*p++ = (uint8_t)(total & 0xFF);
 	*p++ = (uint8_t)(total >> 8);
-	*p++ = 2;
+	*p++ = (uint8_t)(1 + k);
 	*p++ = 1;
 	*p++ = 0;
 	*p++ = 0x80;
 	*p++ = 250;
-	// vendor interface (itf 0) — WebUSB
+	// vendor interface (itf 0) — WebUSB, endpoints 0x02/0x82
 	*p++ = 9;
 	*p++ = TUSB_DESC_INTERFACE;
 	*p++ = 0;
@@ -177,50 +181,55 @@ static uint16_t build_xinput_config(uint8_t *b)
 	*p++ = 64;
 	*p++ = 0;
 	*p++ = 0;
-	// XInput interface (itf 1) — vendor class 0xFF/0x5D/0x01, 2 interrupt eps
-	*p++ = 9;
-	*p++ = TUSB_DESC_INTERFACE;
-	*p++ = 1;
-	*p++ = 0;
-	*p++ = 2;
-	*p++ = 0xFF;
-	*p++ = 0x5D;
-	*p++ = 0x01;
-	*p++ = 0;
-	// XInput "unknown" 0x21 descriptor (verbatim; bytes 6/13 = IN/OUT ep addr)
-	*p++ = 0x11;
-	*p++ = 0x21;
-	*p++ = 0x00;
-	*p++ = 0x01;
-	*p++ = 0x01;
-	*p++ = 0x25;
-	*p++ = 0x83;
-	*p++ = 0x14;
-	*p++ = 0x00;
-	*p++ = 0x00;
-	*p++ = 0x00;
-	*p++ = 0x00;
-	*p++ = 0x13;
-	*p++ = 0x03;
-	*p++ = 0x08;
-	*p++ = 0x00;
-	*p++ = 0x00;
-	// XInput IN endpoint (interrupt, 0x83, 1 ms)
-	*p++ = 7;
-	*p++ = TUSB_DESC_ENDPOINT;
-	*p++ = 0x83;
-	*p++ = 0x03;
-	*p++ = 0x20;
-	*p++ = 0;
-	*p++ = 1;
-	// XInput OUT endpoint (interrupt, 0x03, 8 ms)
-	*p++ = 7;
-	*p++ = TUSB_DESC_ENDPOINT;
-	*p++ = 0x03;
-	*p++ = 0x03;
-	*p++ = 0x20;
-	*p++ = 0;
-	*p++ = 8;
+	// k XInput interfaces (itf 1..k)
+	for (uint8_t j = 0; j < k; j++) {
+		uint8_t itfnum = (uint8_t)(1 + j);
+		uint8_t epin = (uint8_t)(0x83 + j), epout = (uint8_t)(0x03 + j);
+		// XInput interface — vendor class 0xFF/0x5D/0x01, 2 interrupt eps
+		*p++ = 9;
+		*p++ = TUSB_DESC_INTERFACE;
+		*p++ = itfnum;
+		*p++ = 0;
+		*p++ = 2;
+		*p++ = 0xFF;
+		*p++ = 0x5D;
+		*p++ = 0x01;
+		*p++ = 0;
+		// XInput "unknown" 0x21 descriptor (bytes [6]/[13] = IN/OUT ep addr)
+		*p++ = 0x11;
+		*p++ = 0x21;
+		*p++ = 0x00;
+		*p++ = 0x01;
+		*p++ = 0x01;
+		*p++ = 0x25;
+		*p++ = epin;
+		*p++ = 0x14;
+		*p++ = 0x00;
+		*p++ = 0x00;
+		*p++ = 0x00;
+		*p++ = 0x00;
+		*p++ = 0x13;
+		*p++ = epout;
+		*p++ = 0x08;
+		*p++ = 0x00;
+		*p++ = 0x00;
+		// IN endpoint (interrupt, 1 ms)
+		*p++ = 7;
+		*p++ = TUSB_DESC_ENDPOINT;
+		*p++ = epin;
+		*p++ = 0x03;
+		*p++ = 0x20;
+		*p++ = 0;
+		*p++ = 1;
+		// OUT endpoint (interrupt, 8 ms)
+		*p++ = 7;
+		*p++ = TUSB_DESC_ENDPOINT;
+		*p++ = epout;
+		*p++ = 0x03;
+		*p++ = 0x20;
+		*p++ = 0;
+		*p++ = 8;
+	}
 	return total;
 }
 
@@ -412,8 +421,14 @@ void usb_descriptors_init(void)
 		s_dev.idVendor = 0x045E;
 		s_dev.idProduct = 0x028E;
 		s_dev.bcdDevice = 0x0120;
-		build_xinput_config(s_emu_cfg);
+		// Start with NO pad interfaces (nothing connected at boot); the shared
+		// dynamic mounter grows the count to match the CONNECTED controllers and
+		// shrinks it lazily — same as the emulated-HID modes, so 2 controllers
+		// present 2 XInput pads.
+		s_emu_ifaces = 0;
+		build_xinput_config(s_emu_cfg, s_emu_ifaces);
 		s_vendor_itf = 0; // WebUSB vendor is itf 0 in the XInput config
+		rebuild_emu_serial();
 	} else if (s_emu) {
 		s_dev.idVendor = s_emu->vid;
 		s_dev.idProduct = s_emu->pid;
@@ -463,10 +478,18 @@ static void rebuild_emu_serial(void)
 // usb_reenumerate() while detached.
 void usb_descriptors_set_emu_ifaces(uint8_t k)
 {
-	if (!s_emu)
-		return;
 	if (k > PP_NSLOT)
 		k = PP_NSLOT;
+	if (s_xinput) {
+		// XInput: vendor stays itf 0, k pad interfaces follow. The serial encodes
+		// k so the host drops its cached config on every up/down re-enumeration.
+		s_emu_ifaces = k;
+		build_xinput_config(s_emu_cfg, k);
+		rebuild_emu_serial();
+		return;
+	}
+	if (!s_emu)
+		return;
 	s_emu_ifaces = k;
 	build_emu_config(s_emu_cfg, s_emu, k);
 	s_vendor_itf = k; // vendor is the interface after the k HIDs
@@ -588,13 +611,18 @@ const uint16_t *tud_descriptor_string_cb(uint8_t index, uint16_t langid)
 		const char *str;
 		switch (index) {
 		case STRID_MANUFACTURER:
-			str = s_emu ? "PicoPuck" : "Valve Software";
+			str = s_emu	 ? "PicoPuck" :
+			      s_xinput	 ? "Microsoft" :
+					   "Valve Software";
 			break;
 		case STRID_PRODUCT:
-			str = s_emu ? s_emu->product : "Steam Controller Puck";
+			str = s_emu    ? s_emu->product :
+			      s_xinput ? "Controller" :
+					 "Steam Controller Puck";
 			break;
 		case STRID_SERIAL:
-			str = s_emu ? s_emu_serial : g_usb_serial;
+			// XInput uses the count-encoding serial too (re-enum cache bust).
+			str = (s_emu || s_xinput) ? s_emu_serial : g_usb_serial;
 			break;
 		case STRID_VENDOR:
 			str = "PicoPuck WebUSB";

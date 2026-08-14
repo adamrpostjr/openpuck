@@ -1,12 +1,12 @@
 // xinput.c — Xbox 360 wired (XInput) personality (see xinput.h).
 //
-// A custom TinyUSB class driver serves the vendor interface (0xFF/0x5D/0x01)
-// and its interrupt IN/OUT endpoints. The interface descriptor is emitted by
-// usb_descriptors.c; here we claim the endpoints in the driver's open()
-// callback, stream the 20-byte report from g_in, and decode host rumble on the
-// OUT endpoint. Single interface (the active controller) — PicoPuck presents one
-// emulated controller at a time, so the per-slot pool of the OpenPuck original
-// collapses to one state block here.
+// A custom TinyUSB class driver serves the XInput interfaces (0xFF/0x5D/0x01)
+// and their interrupt IN/OUT endpoints. The config descriptor (usb_descriptors.c)
+// exposes ONE pad interface per CONNECTED controller via the shared dynamic
+// mounter, so two controllers appear as two Xbox pads on the OS (matching
+// OpenPuck). Each USB pad interface u (itf u+1; vendor is itf 0) is fed from bond
+// slot g_usb_to_bond[u]; host rumble on that interface's OUT endpoint routes back
+// to the same bond slot.
 //
 // PicoPuck's main loop is cooperative (no separate usbd task), so IN transfers
 // are issued directly from xinput_task() rather than deferred to a SOF drain.
@@ -18,6 +18,7 @@
 #include "puck/relay.h"
 #include "sys/settings.h"
 #include "config/modes.h"
+#include "usb_mount.h"
 
 #include <string.h>
 #include "tusb.h"
@@ -34,28 +35,37 @@ enum {
 	XB_A = 0x1000, XB_B = 0x2000, XB_X = 0x4000, XB_Y = 0x8000
 };
 
+// One state block per USB pad interface (usbSlot u = descriptor interface u,
+// itf 1..k). u maps to bond slot g_usb_to_bond[u], exactly like the emu HID path.
 static struct {
 	uint8_t itf, ep_in, ep_out;
 	uint8_t in_buf[32], out_buf[32];
 	bool in_use;
-} g_xi;
+} g_xi[PP_NSLOT];
 
 // ---- custom class driver ---------------------------------------------------
-static void xi_init(void) { g_xi.in_use = false; }
+static void xi_init(void) { memset(g_xi, 0, sizeof(g_xi)); }
 static bool xi_deinit(void) { return true; }
 static void xi_reset(uint8_t rhport)
 {
 	(void)rhport;
-	g_xi.itf = g_xi.ep_in = g_xi.ep_out = 0;
-	g_xi.in_use = false;
+	// Cleared on every (re)enumeration; xi_open re-populates the mounted pads.
+	for (int u = 0; u < PP_NSLOT; u++) {
+		g_xi[u].itf = g_xi[u].ep_in = g_xi[u].ep_out = 0;
+		g_xi[u].in_use = false;
+	}
 }
 static uint16_t xi_open(uint8_t rhport, tusb_desc_interface_t const *itf,
 			uint16_t max_len)
 {
 	if (!(itf->bInterfaceClass == 0xFF && itf->bInterfaceSubClass == 0x5D &&
 	      itf->bInterfaceProtocol == 0x01))
-		return 0;  // not the XInput interface → let another driver claim it
-	g_xi.itf = itf->bInterfaceNumber;
+		return 0;  // not an XInput interface → let another driver claim it
+	// Vendor (WebUSB) is itf 0; pad interfaces are itf 1..k → usbSlot u = itf-1.
+	uint8_t u = (uint8_t)(itf->bInterfaceNumber - 1);
+	if (u >= PP_NSLOT)
+		return 0;
+	g_xi[u].itf = itf->bInterfaceNumber;
 	uint8_t const *p = (uint8_t const *)itf;
 	uint8_t const *end = p + max_len;
 	uint16_t used = itf->bLength;
@@ -67,17 +77,18 @@ static uint16_t xi_open(uint8_t rhport, tusb_desc_interface_t const *itf,
 			tusb_desc_endpoint_t const *ep = (tusb_desc_endpoint_t const *)p;
 			usbd_edpt_open(rhport, ep);
 			if (tu_edpt_dir(ep->bEndpointAddress) == TUSB_DIR_IN)
-				g_xi.ep_in = ep->bEndpointAddress;
+				g_xi[u].ep_in = ep->bEndpointAddress;
 			else
-				g_xi.ep_out = ep->bEndpointAddress;
+				g_xi[u].ep_out = ep->bEndpointAddress;
 			opened++;
 		}
 		used += blen;
 		p += blen;
 	}
-	g_xi.in_use = true;
-	if (g_xi.ep_out)  // arm OUT (rumble/LED)
-		usbd_edpt_xfer(rhport, g_xi.ep_out, g_xi.out_buf, sizeof(g_xi.out_buf));
+	g_xi[u].in_use = true;
+	if (g_xi[u].ep_out)  // arm OUT (rumble/LED)
+		usbd_edpt_xfer(rhport, g_xi[u].ep_out, g_xi[u].out_buf,
+			       sizeof(g_xi[u].out_buf));
 	return used;
 }
 static bool xi_ctrl(uint8_t rhport, uint8_t stage,
@@ -89,19 +100,21 @@ static bool xi_ctrl(uint8_t rhport, uint8_t stage,
 static bool xi_xfer(uint8_t rhport, uint8_t ep, xfer_result_t res, uint32_t n)
 {
 	(void)res;
-	if (!g_xi.in_use)
-		return true;
-	if (ep == g_xi.ep_out) {
+	for (int u = 0; u < PP_NSLOT; u++) {
+		if (!g_xi[u].in_use || ep != g_xi[u].ep_out)
+			continue;
 		// Rumble packet: [00][08][00][big][small][00][00][00]; LED [01][03][led].
-		if (n >= 5 && g_xi.out_buf[0] == 0x00 && g_xi.out_buf[1] == 0x08) {
-			int slot = -1;
-			for (int s = 0; s < PP_NSLOT; s++)
-				if (g_slot[s].connected) { slot = s; break; }
+		if (n >= 5 && g_xi[u].out_buf[0] == 0x00 &&
+		    g_xi[u].out_buf[1] == 0x08) {
+			int slot = (u < USB_MOUNT_NSLOT) ? g_usb_to_bond[u] : -1;
 			if (slot >= 0 && settings()->type[ET_XBOX].rumble)
-				puck_rumble(slot, (uint16_t)g_xi.out_buf[3] * 257u,
-					    (uint16_t)g_xi.out_buf[4] * 257u);
+				puck_rumble(slot,
+					    (uint16_t)g_xi[u].out_buf[3] * 257u,
+					    (uint16_t)g_xi[u].out_buf[4] * 257u);
 		}
-		usbd_edpt_xfer(rhport, g_xi.ep_out, g_xi.out_buf, sizeof(g_xi.out_buf));
+		usbd_edpt_xfer(rhport, g_xi[u].ep_out, g_xi[u].out_buf,
+			       sizeof(g_xi[u].out_buf));
+		break;
 	}
 	return true;
 }
@@ -148,13 +161,6 @@ static uint16_t code_to_xb(uint8_t c)
 	case 15: return XB_DRIGHT;
 	default: return 0;
 	}
-}
-static int active_slot(void)
-{
-	for (int s = 0; s < PP_NSLOT; s++)
-		if (g_slot[s].connected)
-			return s;
-	return 0;
 }
 static void xi_build(int slot, uint8_t *r)
 {
@@ -218,18 +224,26 @@ static void xi_build(int slot, uint8_t *r)
 
 void xinput_task(void)
 {
-	if (!g_xi.in_use || g_xi.ep_in == 0 || !tud_mounted())
+	if (!tud_mounted())
 		return;
 	static uint32_t last_ms;
 	uint32_t now = to_ms_since_boot(get_absolute_time());
-	if (now - last_ms < 4)  // ~250 Hz cap
+	if (now - last_ms < 4)  // ~250 Hz cap (per interface)
 		return;
-	if (usbd_edpt_busy(0, g_xi.ep_in))
-		return;  // a transfer is still in flight — newest state next cycle
 	last_ms = now;
-	xi_build(active_slot(), g_xi.in_buf);
-	if (usbd_edpt_claim(0, g_xi.ep_in)) {
-		if (!usbd_edpt_xfer(0, g_xi.ep_in, g_xi.in_buf, 20))
-			usbd_edpt_release(0, g_xi.ep_in);
+	// Stream every mounted pad from its bond slot (usbSlot u → g_usb_to_bond[u]).
+	for (int u = 0; u < PP_NSLOT; u++) {
+		if (!g_xi[u].in_use || g_xi[u].ep_in == 0)
+			continue;
+		if (usbd_edpt_busy(0, g_xi[u].ep_in))
+			continue;  // in flight — newest state next cycle
+		int slot = (u < USB_MOUNT_NSLOT) ? g_usb_to_bond[u] : -1;
+		if (slot < 0)
+			continue;
+		xi_build(slot, g_xi[u].in_buf);
+		if (usbd_edpt_claim(0, g_xi[u].ep_in)) {
+			if (!usbd_edpt_xfer(0, g_xi[u].ep_in, g_xi[u].in_buf, 20))
+				usbd_edpt_release(0, g_xi[u].ep_in);
+		}
 	}
 }
