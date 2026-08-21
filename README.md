@@ -1,5 +1,8 @@
 # OpenPuck
-Opensource firmware for NRF52840 Pro Micro that copycats the Steam Controller 2 Puck and allows emulation of Xbox, Switch, and PS3/4/5 controllers and also includes an independant lizard mode (which can work on UAC prompts/task manager/etc). The Switch and PS3 modes have been verified to work on real consoles and Switch, PS4/5 modes have gyro (and touchpad where available) hooked in. Back 4 buttons are mappable for all emulated modes.
+
+[![BuyMeACoffee](https://raw.githubusercontent.com/pachadotdev/buymeacoffee-badges/main/bmc-yellow.svg)](https://github.com/safijari/openpuck/discussions/211)
+
+OpenPuck is an opensource firmware for NRF52840 Pro Micro that copycats the Steam Controller 2 Puck and allows emulation of Xbox, Original Xbox, Switch, and PS3/4/5 controllers and also includes an independant lizard mode (which can work on UAC prompts/task manager/etc). The Switch, PS3, and Original Xbox modes have been verified to work on real consoles and Switch, PS4/5 modes have gyro (and touchpad where available) hooked in. Back 4 buttons are mappable for all emulated modes.
 
 > [!WARNING]
 > Every part of this project _HEAVILY_ used LLMs*
@@ -37,8 +40,9 @@ Similarly you can hold all 4 back buttons and press Y to switch (teehee) over to
 | WebUSB panel → mode 5 | DualSense + Gyro + Trackpad | PC only |
 | WebUSB panel → mode 6 | DS4/HIDGYRO + Gyro + Trackpad | PC only |
 | WebUSB panel → mode 9 | PS3 DualShock 3 / Sixaxis | Enumerates on a real PS3 (+ gyro/haptics) |
-| WebUSB panel → mode 10 | DirectInput (flight/space sims) | Every axis at once, as two DirectInput joysticks |
-| WebUSB panel → mode 11 | SInput (SDL-native) | Sticks + analog triggers + gyro + both trackpads + battery |
+| WebUSB panel → mode 10 | Original Xbox Controller S | Enumerates on a real Original Xbox |
+| WebUSB panel → mode 11 | DirectInput (flight/space sims) | Every axis at once, as two DirectInput joysticks |
+| WebUSB panel → mode 12 | SInput (SDL-native) | Sticks + analog triggers + gyro + both trackpads + battery |
 
 **DirectInput mode** exists because Steam Input funnels everything through XInput, so only a handful of the
 controller's analog inputs can be live at once — a problem for flight and space sims, which bind axes through

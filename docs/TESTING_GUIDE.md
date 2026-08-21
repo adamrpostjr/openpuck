@@ -13,7 +13,7 @@
 - Is battery level shown and correct?
 - Is the polling rate and response rate the same? Is it around 250hz?
 
-### Testing the DirectInput mode (mode 10)
+### Testing the DirectInput mode (mode 11)
 
 Windows has a built-in DirectInput tester: run `joy.cpl` (or Settings → Bluetooth & devices → Devices → More
 devices → *Set up USB game controllers*). **Two** entries should appear — that's the point of the mode; one
@@ -30,7 +30,7 @@ Things to confirm:
 DirectInput is Windows-only. On Linux the same descriptor shows up through evdev (`evtest`, `jstest`), but how
 the two collections are split is kernel-dependent — use SInput mode there.
 
-### Testing the SInput mode (mode 11)
+### Testing the SInput mode (mode 12)
 
 SInput needs a host with SDL's SInput driver (SDL 3.4+ / a current Steam client). Practical checks:
 
