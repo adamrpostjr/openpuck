@@ -17,6 +17,7 @@
 #include "puck/triton.h"
 #include "puck/slots.h"
 #include "sys/settings.h"
+#include "sys/pplog.h"
 #include "config/picopuck_config.h"
 
 #include <stdio.h>
@@ -345,11 +346,15 @@ static void handle_le_connection_complete(uint8_t *packet)
 	hci_con_handle_t handle =
 		hci_subevent_le_connection_complete_get_connection_handle(packet);
 	if (status != ERROR_CODE_SUCCESS) {
+		char lb[40];
+		snprintf(lb, sizeof(lb), "LE conn FAIL st=0x%02X\n", status);
+		pplog(lb);
 		s_connecting.busy = false;
 		return;
 	}
 	int slot = slot_alloc();
 	if (slot < 0) {
+		pplog("LE conn but NO FREE SLOT\n");
 		gap_disconnect(handle);
 		s_connecting.busy = false;
 		return;
@@ -367,6 +372,12 @@ static void handle_le_connection_complete(uint8_t *packet)
 
 	printf("[bt] LE connected slot %d handle 0x%04X name '%s'\n", slot, handle,
 	       c->name);
+	{
+		char lb[48];
+		snprintf(lb, sizeof(lb), "LE conn slot %d '%s' -> pairing\n", slot,
+			 c->name);
+		pplog(lb);
+	}
 	// Encrypt/bond; hids_client starts once secured (SM_EVENT_PAIRING/REENCRYPTION).
 	sm_request_pairing(handle);
 }
@@ -457,9 +468,14 @@ static void sm_handler(uint8_t type, uint16_t channel, uint8_t *packet,
 			sm_event_numeric_comparison_request_get_handle(packet));
 		break;
 	case SM_EVENT_PAIRING_COMPLETE: {
-		if (sm_event_pairing_complete_get_status(packet) == ERROR_CODE_SUCCESS) {
-			int slot = slot_by_handle(
-				sm_event_pairing_complete_get_handle(packet));
+		uint8_t st = sm_event_pairing_complete_get_status(packet);
+		int slot = slot_by_handle(
+			sm_event_pairing_complete_get_handle(packet));
+		char lb[48];
+		snprintf(lb, sizeof(lb), "PAIR done slot %d st=%u reason=0x%02X\n",
+			 slot, st, sm_event_pairing_complete_get_reason(packet));
+		pplog(lb);
+		if (st == ERROR_CODE_SUCCESS) {
 			if (slot >= 0)
 				resolve_name(slot);
 			// Add the freshly-bonded device to the resolving list so it
@@ -866,6 +882,12 @@ bool bt_pair(const uint8_t addr[6], uint8_t addr_type)
 		s_scan_running = false;
 	}
 	uint8_t r = gap_connect((uint8_t *)addr, (bd_addr_type_t)addr_type);
+	{
+		char lb[40];
+		snprintf(lb, sizeof(lb), "bt_pair type=%u gap_connect r=0x%02X\n",
+			 addr_type, r);
+		pplog(lb);
+	}
 	if (r != ERROR_CODE_SUCCESS) {
 		s_connecting.busy = false;
 		s_pair_pending = true;  // fall back to connecting on next advert
