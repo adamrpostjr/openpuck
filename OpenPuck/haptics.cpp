@@ -701,43 +701,41 @@ void hapticTask()
 		static const uint8_t DATA_LIZARD_ON[3] = { SETTING_LIZARD_MODE,
 							   0x01, 0x00 };
 
-		if (modeIsPuck(g_usbMode)) {
-			// We're in puck mode. Leave the haptics to Steam.
-			return;
-		}
-
-		// We're in emulated controller mode.
-		bool wantAuto = (g_padHaptics != 0);
-		for (int s = 0; s < NSLOT; s++) {
-			if (!g_slot[s].used || !hapticLinkUp(s)) {
-				// re-land id9 on the next (re)connect: a fresh controller defaults to
-				// autonomous, but one carrying our previous session's id9 does not
-				landedAuto[s] = false;
-				lastKeep[s] = 0;
-				continue;
-			}
-			if (wantAuto) {
-				if (!landedAuto[s]) {
-					landedAuto[s] = true;
+		// In puck mode Steam owns haptics; skip id9 steering.
+		if (!modeIsPuck(g_usbMode)) {
+			bool wantAuto = (g_padHaptics != 0);
+			for (int s = 0; s < NSLOT; s++) {
+				if (!g_slot[s].used || !hapticLinkUp(s)) {
+					// re-land id9 on the next (re)connect: a fresh controller defaults to
+					// autonomous, but one carrying our previous session's id9 does not
+					landedAuto[s] = false;
+					lastKeep[s] = 0;
+					continue;
+				}
+				if (wantAuto) {
+					if (!landedAuto[s]) {
+						landedAuto[s] = true;
+						relayEnqueue(
+							IBEX_CMD_SET_SETTINGS_VALUES,
+							DATA_LIZARD_ON,
+							sizeof DATA_LIZARD_ON,
+							false, (uint8_t)s);
+					}
+				} else {
+					landedAuto[s] = false;
+					if (lastKeep[s] &&
+					    (uint32_t)(millis() - lastKeep[s]) <
+						    LIZKEEP_MS)
+						continue;
+					lastKeep[s] = millis();
 					relayEnqueue(
 						IBEX_CMD_SET_SETTINGS_VALUES,
-						DATA_LIZARD_ON,
-						sizeof DATA_LIZARD_ON, false,
+						DATA_LIZARD_OFF,
+						sizeof DATA_LIZARD_OFF, false,
 						(uint8_t)s);
 				}
-			} else {
-				landedAuto[s] = false;
-				if (lastKeep[s] &&
-				    (uint32_t)(millis() - lastKeep[s]) <
-					    LIZKEEP_MS)
-					continue;
-				lastKeep[s] = millis();
-				relayEnqueue(IBEX_CMD_SET_SETTINGS_VALUES,
-					     DATA_LIZARD_OFF,
-					     sizeof DATA_LIZARD_OFF, false,
-					     (uint8_t)s);
 			}
-		}
+		} // !modeIsPuck
 	}
 	// Per-slot link-edge detect (backup for hapticOnReconnect in rf_link).
 	static bool wasHapticLinkUp[NSLOT] = { 0 };
