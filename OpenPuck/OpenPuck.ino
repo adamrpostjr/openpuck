@@ -98,12 +98,16 @@ void usbReenumerate(uint8_t k)
 		k); // mode's fixed HIDs (if any) + k slot interfaces
 	if (s_dynWantWebusb)
 		USBDevice.addInterface(usb_web);
-	// bmAttributes: required(0x80) | remote_wakeup(0x20). Clean-PS modes advertise 0x80 only, like the
-	// genuine pad -- they have no wake mouse to wake a host with anyway, and a classifier that compares the
-	// config descriptor against a real DualSense/DS4 should find nothing extra. (Same reasoning as the
-	// static PS3 path in setup().)
-	USBDevice.setConfigurationAttribute(
-		modeIsCleanPS(g_usbMode) ? 0x80 : (0x80 | 0x20));
+	// Config descriptor: clean-PS modes report what a genuine pad reports -- self-powered (it has a
+	// battery), 500 mA, and NO remote-wakeup (they have no wake mouse to wake a host with anyway). Values
+	// from a real DS4 / ViGEmBus's emulated one: bmAttributes 0xC0, bMaxPower 0xFA. Everything else keeps
+	// required(0x80) | remote_wakeup(0x20) and the core's default power, because the wake mouse needs it.
+	if (modeIsCleanPS(g_usbMode)) {
+		USBDevice.setConfigurationAttribute(0xC0);
+		USBDevice.setConfigurationMaxPower(500);
+	} else {
+		USBDevice.setConfigurationAttribute(0x80 | 0x20);
+	}
 	USBDevice.attach();
 }
 
