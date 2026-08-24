@@ -44,6 +44,20 @@ Similarly you can hold all 4 back buttons and press Y to switch (teehee) over to
 | WebUSB panel → mode 11 | DirectInput (flight/space sims) | Every axis at once, as two DirectInput joysticks |
 | WebUSB panel → mode 12 | SInput (SDL-native) | Sticks + analog triggers + gyro + both trackpads + battery |
 
+**PlayStation modes.** Modes 5 (DualSense) and 6 (DS4) also come in "game/clean" variants — panel modes 7 and
+8 — which drop the wake-mouse and WebUSB interfaces so the device enumerates as *nothing but* a PlayStation
+pad, which is what titles that classify controllers by their interface list want. A few host-side caveats:
+
+* **PS4 / PS5 consoles reject them.** Those consoles only accept pads that pass Sony's authentication
+  challenge, which needs a real auth chip; the DS4/DS5 modes are for PCs (and PC emulators). On a PS4 the
+  "Mouse connected" pop-up you see with mode 6 is the puck's wake-mouse interface — mode 8 has no mouse, but
+  the pad still won't authenticate.
+* **PS3 mode is for the PS3** (and for Linux, where `hid-sony` drives it out of the box). Windows and macOS
+  have no built-in Sixaxis driver, and SDL disables its own PS3 HIDAPI driver on Windows by default, so the
+  host falls back to a *generic* DirectInput mapping and the buttons come out scrambled — exactly as a genuine
+  DualShock 3 does. Install [DsHidMini](https://github.com/nefarius/DsHidMini) (or Sony's `sixaxis.sys`), or
+  set `SDL_JOYSTICK_HIDAPI_PS3=1`, if you want DS3 mode on a PC; otherwise use mode 5/6/7/8 there.
+
 **DirectInput mode** exists because Steam Input funnels everything through XInput, so only a handful of the
 controller's analog inputs can be live at once — a problem for flight and space sims, which bind axes through
 DirectInput. DirectInput itself caps a device at 8 axes, so this mode presents the controller as **two**

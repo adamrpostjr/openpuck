@@ -186,18 +186,8 @@ static void ps5Build(uint8_t usbSlot, uint8_t slot, uint8_t out[63])
 	out[9] = ((b & TB_STEAM) ? 0x01 : 0) |
 		 ((b & TB_TOUCH || b & TB_LPADC || b & TB_RPADC) ? 0x02 : 0) |
 		 ((b & TB_MUTE) ? 0x04 : 0);
-	out[15] = g_in[slot].gx & 0xFF;
-	out[16] = g_in[slot].gx >> 8;
-	out[17] = g_in[slot].gz & 0xFF;
-	out[18] = g_in[slot].gz >> 8;
-	out[19] = (-g_in[slot].gy) & 0xFF;
-	out[20] = (-g_in[slot].gy) >> 8;
-	out[21] = g_in[slot].ax & 0xFF;
-	out[22] = g_in[slot].ax >> 8;
-	out[23] = g_in[slot].ay & 0xFF;
-	out[24] = g_in[slot].ay >> 8;
-	out[25] = g_in[slot].az & 0xFF;
-	out[26] = g_in[slot].az >> 8;
+	// gyro X/Y/Z then accel X/Y/Z, 6 x le16 (hid-playstation: dualsense_input_report gyro[]/accel[])
+	psImuPack(out + 15, g_in[slot]);
 	uint16_t tlx, tly, trx, trry;
 	steamPadsToTouch(b, PS5_TOUCH_H, g_in[slot].lpx, g_in[slot].lpy,
 			 g_in[slot].rpx, g_in[slot].rpy, &tlx, &tly, &trx,
