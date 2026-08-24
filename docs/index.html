@@ -177,12 +177,15 @@
         <button data-mode="4" class="modebtn">Switch Pro + gyro</button>
         <button data-mode="5" class="modebtn">PS5 DualSense</button>
         <button data-mode="6" class="modebtn">HID gyro (DS4)</button>
+        <button data-mode="7" class="modebtn">PS5 clean (games)</button>
+        <button data-mode="8" class="modebtn">DS4 clean (games)</button>
         <button data-mode="9" class="modebtn">PS3 (DualShock 3)</button>
         <button data-mode="10" class="modebtn">Original Xbox</button>
         <button data-mode="11" class="modebtn">DirectInput (sims)</button>
         <button data-mode="12" class="modebtn">SInput (SDL native)</button>
       </div>
-      <p class="note">Switching reboots the copycat and re-enumerates USB (~2 s). WebUSB works in every mode, including Steam/Lizard with Steam running (Chrome claims the vendor interface; Steam keeps the HID slots). Switch HORIPAD + WebUSB is PC-only. Original Xbox emulates one Microsoft Controller S and uses the Xbox mapping tab; LB/RB become White/Black. It's for a real Original Xbox console — a PC needs a driver for the original Xbox controller to see it as a gamepad.</p>
+      <p class="note"><b>PS5 clean / DS4 clean</b> are the same pads as PS5 DualSense / HID gyro (DS4), but enumerated as a single non-composite HID interface — no wake-mouse, no WebUSB, no CDC. Games with native PlayStation support (Fortnite, Pragmata, anything on GameInput / Windows.Gaming.Input) classify the whole USB device and refuse the PlayStation path for a composite, so if a game can't see the pad in mode 5/6, use these. They are single-controller by design, and <b>this panel disconnects</b> while one is active: chord back with all four back paddles + A, or set a back-4 + D-pad chord to return.</p>
+      <p class="note">Switching reboots the copycat and re-enumerates USB (~2 s). WebUSB works in every mode EXCEPT the clean PlayStation modes and PS3, including Steam/Lizard with Steam running (Chrome claims the vendor interface; Steam keeps the HID slots). Switch HORIPAD + WebUSB is PC-only. Original Xbox emulates one Microsoft Controller S and uses the Xbox mapping tab; LB/RB become White/Black. It's for a real Original Xbox console — a PC needs a driver for the original Xbox controller to see it as a gamepad.</p>
       <p class="note"><b>DirectInput</b> is for flight/space sims: every analog input is live at once, split over two joysticks (#1 sticks + triggers + 26 buttons, #2 trackpads + gyro). Trackpad axes hold their last position and re-centre on a pad click. <b>SInput</b> is the open SDL-native protocol — SDL3 / Steam Input read sticks, both analog triggers, gyro, both trackpads and battery from it natively, with rumble back from the host.</p>
       <div class="row"><label>Persist last mode</label>
         <button id="persistMode">off</button>
