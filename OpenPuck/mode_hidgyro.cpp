@@ -195,11 +195,18 @@ static void hidGyroBuild(uint8_t usbSlot, uint8_t slot, uint8_t out[63])
 void HidGyroController::begin()
 {
 }
-// HID budget: clean DS4 (MODE_DS4_GAME) has no wake mouse; normal HIDGYRO keeps it (1 HID).
 uint8_t HidGyroController::maxSlots() const
 {
-	uint8_t cap = modeIsCleanPS(g_usbMode) ? (uint8_t)CFG_TUD_HID :
-						 (uint8_t)(CFG_TUD_HID - 1);
+	// Clean-PS modes exist to present exactly what a host that CLASSIFIES the USB device expects of a real
+	// Sony pad -- GameInput / Windows.Gaming.Input and the native-PlayStation paths in games look at the
+	// whole device, not just the VID/PID, and refuse the PS glyph path for a composite. One connected
+	// controller = one HID interface = a non-composite device (no MI_xx on Windows). A SECOND controller
+	// would add a second interface and make it composite again, so the clean modes are deliberately
+	// single-pad; use MODE_PS5 / MODE_HIDGYRO (composite either way, and they keep the panel + host-wake)
+	// when you want several controllers at once.
+	if (modeIsCleanPS(g_usbMode))
+		return 1;
+	uint8_t cap = (uint8_t)(CFG_TUD_HID - 1);
 	return cap < NSLOT ? cap : (uint8_t)NSLOT;
 }
 void HidGyroController::usbIdentity()

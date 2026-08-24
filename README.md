@@ -44,9 +44,20 @@ Similarly you can hold all 4 back buttons and press Y to switch (teehee) over to
 | WebUSB panel → mode 11 | DirectInput (flight/space sims) | Every axis at once, as two DirectInput joysticks |
 | WebUSB panel → mode 12 | SInput (SDL-native) | Sticks + analog triggers + gyro + both trackpads + battery |
 
-**PlayStation modes.** Modes 5 (DualSense) and 6 (DS4) also come in "game/clean" variants — panel modes 7 and
-8 — which drop the wake-mouse and WebUSB interfaces so the device enumerates as *nothing but* a PlayStation
-pad, which is what titles that classify controllers by their interface list want. A few host-side caveats:
+**PlayStation modes.** Modes 5 (DualSense) and 6 (DS4) are USB *composite* devices: alongside the pad they
+carry the wake-mouse HID and the WebUSB vendor interface, so Windows enumerates them as
+`VID_054C&PID_0CE6&MI_00` and friends. Steam, SDL and DS4Windows read the pad's HID reports directly and don't
+care — but hosts that **classify** the device do: GameInput / `Windows.Gaming.Input`, and the native-PlayStation
+paths in games (Fortnite, Pragmata, …) refuse the PlayStation path for a composite even with the correct
+VID/PID. **If a game with native PS support can't see the pad, that's why — use the "game/clean" variants,
+panel modes 7 (DualSense) and 8 (DS4).** Those enumerate as a single HID interface and nothing else: no
+wake-mouse, no WebUSB, no CDC, and no remote-wakeup bit, i.e. non-composite. The cost is that the panel can't
+reach the device in those modes (chord back with back-4 + A), and they are deliberately **single-pad** — a
+second controller would add a second interface and make the device composite again, so use mode 5/6 if you want
+several controllers at once. By default the D-pad chords land on them: back-4 + D-pad **up** = clean DS4,
+back-4 + D-pad **right** = clean DualSense.
+
+A few further host-side caveats:
 
 * **PS4 / PS5 consoles reject them.** Those consoles only accept pads that pass Sony's authentication
   challenge, which needs a real auth chip; the DS4/DS5 modes are for PCs (and PC emulators). On a PS4 the
