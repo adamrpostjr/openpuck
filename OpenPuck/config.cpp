@@ -106,6 +106,9 @@ struct Cfg {
 	uint8_t padStick[ET_COUNT][2];
 	// RUMBLE_STYLE_*; 0xFF (short pre-tail file) -> compiled default
 	uint8_t rumbleStyle;
+	// autonomous controller power-off on host sleep (see haptics.h g_suspendOff). 0/1; 0xFF (short
+	// pre-tail file) -> compiled default (on)
+	uint8_t suspendOff;
 }; // rsvd0 = ex-padSmooth, now the one-shot debug-CDC arm
 
 // Shortest cfg.bin we still accept: the layout as of CFG_MAGIC 0xCF, i.e. everything before the appended tail.
@@ -132,7 +135,8 @@ void saveCfg()
 		  { g_chordDpad[0], g_chordDpad[1], g_chordDpad[2],
 		    g_chordDpad[3] },
 		  {},
-		  g_rumbleStyle };
+		  g_rumbleStyle,
+		  g_suspendOff };
 	for (int i = 0; i < ET_COUNT; i++) {
 		c.type[i] = g_type[i];
 		c.padStick[i][0] = g_padStickCfg[i][0];
@@ -224,6 +228,9 @@ void loadCfg()
 			// host-rumble style (0xFF = short pre-tail file -> keep the default)
 			if (c.rumbleStyle <= RUMBLE_STYLE_MAX)
 				g_rumbleStyle = c.rumbleStyle;
+			// suspend power-off enable (0xFF = a cfg.bin predating this tail field -> keep the on default)
+			if (c.suspendOff <= 1)
+				g_suspendOff = c.suspendOff;
 			// The poll RX window is now FIXED (g_rxWin is const) -- any persisted rxWin10 is ignored.
 		}
 		f.close();
