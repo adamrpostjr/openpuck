@@ -26,13 +26,13 @@
 
 	const Current = $derived(SECTION_COMPONENTS[ui.section]);
 
-	// Until the transport lands, ?fixture=true renders the shell against a
-	// recorded v17 blob so the layout can be reviewed without hardware. This is
-	// a one-shot bootstrap, so it runs at init -- in an $effect it would read
-	// and write the same state and loop forever.
+	// One-shot bootstrap. In an $effect this would read and write the same state
+	// and loop forever.
 	if (new URLSearchParams(location.search).get('fixture') === 'true') {
 		device.loadFixture();
 		logs.ok('loaded v17 fixture (no device attached)');
+	} else if (supported) {
+		device.init();
 	}
 </script>
 
@@ -56,7 +56,9 @@
 					First connect uses the Chrome/Edge device picker; reconnects are automatic. If the picker is empty, quit
 					any app holding the device or replug.
 				</p>
-				<button type="button" class="btn preset-filled-primary-500">Connect</button>
+				<button type="button" class="btn preset-filled-primary-500" onclick={() => device.connect()}>
+					{device.conn === 'connecting' ? 'Connecting…' : 'Connect'}
+				</button>
 				<p class="text-app-muted mt-4 text-xs">
 					On Linux, a puck that stays "disconnected" after the picker is usually a udev permissions issue — see
 					<a class="text-primary-700-300 hover:underline" href="./WEBUSB_LINUX.md">WEBUSB_LINUX.md</a>.

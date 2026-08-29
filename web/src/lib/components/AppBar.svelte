@@ -127,7 +127,11 @@
 		</Portal>
 	</Menu>
 
-	<button type="button" class="btn preset-filled-primary-500 flex items-center gap-1.5 text-sm">
+	<button
+		type="button"
+		class="btn preset-filled-primary-500 flex items-center gap-1.5 text-sm"
+		onclick={() => device.connect()}
+	>
 		<PlugZapIcon size={15} />
 		{device.connected ? 'Reconnect' : 'Connect'}
 	</button>

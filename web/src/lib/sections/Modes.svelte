@@ -3,6 +3,7 @@
 	import { MODES } from '$lib/protocol/modes';
 	import { MODE_NAMES } from '$lib/protocol/blob';
 	import { device } from '$lib/state/device.svelte';
+	import { FIELD, OP } from '$lib/protocol/fields';
 	import Panel from '$lib/components/Panel.svelte';
 	import InfoPopover from '$lib/components/InfoPopover.svelte';
 
@@ -38,6 +39,7 @@
 				{@const active = status?.mode === m.id}
 				<button
 					type="button"
+					onclick={() => device.sendRaw([OP.setMode, m.id])}
 					class="rounded-container flex flex-col border p-3 text-left transition-colors
 						{active
 						? 'border-success-500 bg-success-500/10 ring-success-500/30 ring-1'
@@ -70,6 +72,7 @@
 			<span class="text-sm">Persist last mode</span>
 			<button
 				type="button"
+				onclick={() => device.setField(FIELD.persistMode, status?.persistMode ? 0 : 1)}
 				class="btn btn-sm {status?.persistMode ? 'preset-filled-success-500' : 'preset-tonal-surface'}"
 			>
 				{status?.persistMode ? 'on' : 'off'}
@@ -107,7 +110,12 @@
 					<tr class="border-app-line-soft border-b">
 						<td class="py-2 font-mono text-xs">back4 + {b}</td>
 						<td class="py-2">
-							<select class="select w-full max-w-xs text-sm" value={status?.chords.face[i]} disabled={!status}>
+							<select
+								class="select w-full max-w-xs text-sm"
+								value={status?.chords.face[i]}
+								disabled={!status}
+								onchange={(e) => device.setField(FIELD.chordFace[i], +e.currentTarget.value)}
+							>
 								{#each FACE_OPTIONS as o (o.id)}
 									<option value={o.id}>{o.name}</option>
 								{/each}
@@ -128,6 +136,7 @@
 								class="select w-full max-w-xs text-sm"
 								value={status?.chords.dpad[i]}
 								disabled={!status?.caps.dpadChords}
+								onchange={(e) => device.setField(FIELD.chordDpad[i], +e.currentTarget.value)}
 							>
 								{#each DPAD_OPTIONS as o (o.id)}
 									<option value={o.id}>{o.name}</option>

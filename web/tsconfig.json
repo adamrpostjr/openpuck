@@ -9,7 +9,7 @@
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
-    "types": ["node", "vite/client"],
+    "types": ["node", "vite/client", "w3c-web-usb"],
     "resolveJsonModule": true,
     "allowJs": true,
     "checkJs": true,
