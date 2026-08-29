@@ -9,7 +9,9 @@
 		targetOptions,
 		TYPE_DEFS,
 	} from '$lib/protocol/types';
+	import { Tabs } from '@skeletonlabs/skeleton-svelte';
 	import Panel from '$lib/components/Panel.svelte';
+	import Toggle from '$lib/components/Toggle.svelte';
 	import InfoPopover from '$lib/components/InfoPopover.svelte';
 	import GateBadge from '$lib/components/GateBadge.svelte';
 
@@ -42,23 +44,24 @@
 		</InfoPopover>
 	{/snippet}
 
-	<div class="mb-4 flex flex-wrap gap-1.5">
-		{#each TYPE_DEFS as t, et (t.key)}
-			<button
-				type="button"
-				onclick={() => (tab = et)}
-				class="rounded-base flex items-center gap-1.5 border px-3 py-1.5 text-sm font-semibold transition-colors
-					{current === et
-					? 'border-primary-500 bg-primary-500/15 text-app-strong'
-					: 'border-app-line bg-app-well text-app-muted hover:border-primary-600'}"
-			>
-				{t.name}
-				{#if et === activeEt}
-					<span class="bg-success-500 size-1.5 shrink-0 rounded-full" title="Matches the current USB mode"></span>
-				{/if}
-			</button>
-		{/each}
-	</div>
+	<Tabs value={String(current)} onValueChange={(e) => (tab = Number(e.value))} class="mb-4">
+		<Tabs.List class="flex flex-wrap gap-1.5">
+			{#each TYPE_DEFS as t, et (t.key)}
+				<Tabs.Trigger
+					value={String(et)}
+					class="rounded-base flex items-center gap-1.5 border px-3 py-1.5 text-sm font-semibold transition-colors
+						{current === et
+						? 'border-primary-500 bg-primary-500/15 text-app-strong'
+						: 'border-app-line bg-app-well text-app-muted hover:border-primary-600'}"
+				>
+					{t.name}
+					{#if et === activeEt}
+						<span class="bg-success-500 size-1.5 shrink-0 rounded-full" title="Matches the current USB mode"></span>
+					{/if}
+				</Tabs.Trigger>
+			{/each}
+		</Tabs.List>
+	</Tabs>
 
 	{#if !cfg}
 		<p class="text-app-muted text-sm">
@@ -103,16 +106,7 @@
 				<div class="text-app-muted text-[11px] font-semibold tracking-wider uppercase">Behaviour</div>
 
 				{#each [['A/B + X/Y swap', TYPE_OFF.abSwap, cfg.abSwap], ['Trackpad haptics', TYPE_OFF.padHaptics, cfg.padHaptics], ['Rumble', TYPE_OFF.rumble, cfg.rumble]] as [label, off, on] (label)}
-					<div class="flex items-center gap-3">
-						<span class="w-44 shrink-0 text-sm">{label}</span>
-						<button
-							type="button"
-							onclick={() => set(off as number, on ? 0 : 1)}
-							class="btn btn-sm {on ? 'preset-filled-success-500' : 'preset-tonal-surface'}"
-						>
-							{on ? 'on' : 'off'}
-						</button>
-					</div>
+					<Toggle label={label as string} checked={!!on} onChange={(next) => set(off as number, next ? 1 : 0)} />
 				{/each}
 
 				<label class="flex items-center gap-3">

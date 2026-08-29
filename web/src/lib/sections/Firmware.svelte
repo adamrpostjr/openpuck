@@ -2,6 +2,7 @@
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 	import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
 	import UploadIcon from '@lucide/svelte/icons/upload';
+	import { FileUpload } from '@skeletonlabs/skeleton-svelte';
 	import { device } from '$lib/state/device.svelte';
 	import { fwup } from '$lib/state/fwup.svelte';
 	import { releases, relAsset, REL_REPO, type Release } from '$lib/state/releases.svelte';
@@ -17,8 +18,6 @@
 	const gated = $derived(!!status && !device.isDongle && !status.caps.panelUpdate);
 
 	let selected = $state<{ name: string; image: Uint8Array } | null>(null);
-	let dragging = $state(false);
-	let fileInput = $state<HTMLInputElement | null>(null);
 	let factory = $state<Record<string, boolean>>({});
 	let pending = $state<{ title: string; confirm: string; get: () => Promise<Uint8Array> } | null>(null);
 
@@ -120,37 +119,24 @@
 			</InfoPopover>
 		{/snippet}
 
-		<input
-			bind:this={fileInput}
-			type="file"
+		<FileUpload
 			accept=".uf2,application/octet-stream"
-			class="hidden"
-			onchange={(e) => pickFile(e.currentTarget.files?.[0])}
-		/>
-
-		<button
-			type="button"
-			class="rounded-container w-full border-2 border-dashed p-6 text-center transition-colors
-				{dragging ? 'border-success-500 bg-success-500/10' : 'border-app-line hover:border-primary-500'}"
-			onclick={() => fileInput?.click()}
-			ondragover={(e) => {
-				e.preventDefault();
-				dragging = true;
-			}}
-			ondragleave={() => (dragging = false)}
-			ondrop={(e) => {
-				e.preventDefault();
-				dragging = false;
-				pickFile(e.dataTransfer?.files?.[0]);
-			}}
+			maxFiles={1}
+			onFileAccept={(e) => pickFile(e.files[0])}
+			onFileReject={() => logs.error('that is not a .uf2 file')}
 		>
-			<div class="flex items-center justify-center gap-2 text-sm font-semibold">
-				<UploadIcon size={16} /> Drop a .uf2 file here — or click to browse
-			</div>
-			<div class="text-app-muted mt-1 text-xs">
-				{selected ? `${selected.name} — ${Math.round(selected.image.length / 1024)} KiB` : 'no file selected'}
-			</div>
-		</button>
+			<FileUpload.Dropzone
+				class="rounded-container border-app-line hover:border-primary-500 data-[dragging]:border-success-500 data-[dragging]:bg-success-500/10 w-full cursor-pointer border-2 border-dashed p-6 text-center transition-colors"
+			>
+				<div class="flex items-center justify-center gap-2 text-sm font-semibold">
+					<UploadIcon size={16} /> Drop a .uf2 file here — or click to browse
+				</div>
+				<div class="text-app-muted mt-1 text-xs">
+					{selected ? `${selected.name} — ${Math.round(selected.image.length / 1024)} KiB` : 'no file selected'}
+				</div>
+			</FileUpload.Dropzone>
+			<FileUpload.HiddenInput />
+		</FileUpload>
 
 		<div class="mt-3">
 			<button

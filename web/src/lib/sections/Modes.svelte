@@ -5,6 +5,7 @@
 	import { device } from '$lib/state/device.svelte';
 	import { FIELD, OP } from '$lib/protocol/fields';
 	import Panel from '$lib/components/Panel.svelte';
+	import Toggle from '$lib/components/Toggle.svelte';
 	import InfoPopover from '$lib/components/InfoPopover.svelte';
 
 	const status = $derived(device.status);
@@ -69,14 +70,12 @@
 		</div>
 
 		<div class="border-app-line mt-4 flex items-center gap-3 border-t pt-3">
-			<span class="text-sm">Persist last mode</span>
-			<button
-				type="button"
-				onclick={() => device.setField(FIELD.persistMode, status?.persistMode ? 0 : 1)}
-				class="btn btn-sm {status?.persistMode ? 'preset-filled-success-500' : 'preset-tonal-surface'}"
-			>
-				{status?.persistMode ? 'on' : 'off'}
-			</button>
+			<Toggle
+				label="Persist last mode"
+				checked={!!status?.persistMode}
+				disabled={!status}
+				onChange={(next) => device.setField(FIELD.persistMode, next ? 1 : 0)}
+			/>
 			<InfoPopover title="Persist last mode">
 				Off (default): every restart / fresh reconnect boots into Steam mode. On: remembers the last mode you selected.
 			</InfoPopover>

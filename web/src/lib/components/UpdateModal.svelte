@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { Progress } from '@skeletonlabs/skeleton-svelte';
 	import { fwup } from '$lib/state/fwup.svelte';
 
 	const m = $derived(fwup.modal);
@@ -26,20 +27,23 @@
 			<h3 class="mb-1 text-base font-semibold" class:text-error-700-300={m.failed}>{m.title}</h3>
 			<p class="mt-2 text-sm">{m.stage}</p>
 
-			<div class="bg-app-well border-app-line mt-3 h-2.5 overflow-hidden rounded-full border">
-				<div
-					class="h-full transition-[width] duration-200 {m.failed
-						? 'bg-error-500'
-						: m.pct === null
-							? 'bg-primary-500 animate-pulse'
-							: 'bg-success-500'}"
-					style="width: {m.pct === null ? 100 : m.pct}%"
-				></div>
-			</div>
-
-			{#if m.pct !== null && !m.failed}
-				<p class="text-app-muted tabnum mt-1.5 text-xs">{m.pct}%</p>
-			{/if}
+			<!-- A null percentage means an indeterminate stage (verifying on the
+			     puck, rebooting), which Progress renders as such rather than as a
+			     bar frozen at some number. -->
+			<Progress value={m.pct} class="mt-3 grid grid-cols-[1fr_auto] items-center gap-3">
+				<Progress.Track class="bg-app-well border-app-line h-2.5 overflow-hidden rounded-full border">
+					<Progress.Range
+						class="h-full transition-[width] duration-200 {m.failed
+							? 'bg-error-500'
+							: m.pct === null
+								? 'bg-primary-500 animate-pulse'
+								: 'bg-success-500'}"
+					/>
+				</Progress.Track>
+				{#if m.pct !== null && !m.failed}
+					<Progress.ValueText class="text-app-muted tabnum text-xs" />
+				{/if}
+			</Progress>
 			{#if m.detail}
 				<p class="text-app-muted mt-2 text-xs">{m.detail}</p>
 			{/if}
