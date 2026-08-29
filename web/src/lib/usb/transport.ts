@@ -5,6 +5,7 @@
 // reverse-engineered and load-bearing; treat them as fixed unless a real puck
 // says otherwise.
 
+import { parseAck, type FwupAck } from '$lib/protocol/firmware';
 import { logs } from '$lib/state/log.svelte';
 
 /**
@@ -237,6 +238,52 @@ export class Transport {
 
 	readBlob() {
 		return this.readFrame(MARK_STATUS, 12);
+	}
+
+	// ---- firmware update ----
+	//
+	// One persistent transferIn at a time. A wait that times out leaves its
+	// read PENDING for the next wait; issuing a second concurrent read would
+	// silently eat the data the first one eventually resolves with.
+	private fwupRead: Promise<USBInTransferResult> | null = null;
+
+	/** Drop any read pending against a previous session or device. */
+	resetFwupRead() {
+		this.fwupRead = null;
+	}
+
+	async fwupSend(cmd: number[]): Promise<void> {
+		if (!this.dev) throw new Error('device gone');
+		await this.dev.transferOut(this.epOut, new Uint8Array(cmd));
+	}
+
+	async fwupAckWait(timeoutMs: number): Promise<FwupAck | null> {
+		const deadline = Date.now() + timeoutMs;
+		for (;;) {
+			const remain = deadline - Date.now();
+			if (remain <= 0) return null;
+			if (!this.dev) throw new Error('device gone');
+			if (!this.fwupRead) this.fwupRead = this.dev.transferIn(this.epIn, 64);
+			const r = await Promise.race([
+				this.fwupRead,
+				new Promise<'timeout'>((res) => setTimeout(() => res('timeout'), remain)),
+			]);
+			if (r === 'timeout') return null;
+			this.fwupRead = null;
+			if (r.status !== 'ok' || !r.data) continue;
+			const ack = parseAck(new Uint8Array(r.data.buffer, r.data.byteOffset, r.data.byteLength));
+			if (ack) return ack;
+		}
+	}
+
+	/** Send a control op (all idempotent firmware-side) and wait, resending on timeout. */
+	async fwupCtl(cmd: number[], timeoutMs: number, label: string): Promise<FwupAck> {
+		for (let t = 0; t < 3; t++) {
+			await this.fwupSend(cmd);
+			const a = await this.fwupAckWait(timeoutMs);
+			if (a) return a;
+		}
+		throw new Error(`no response to ${label}`);
 	}
 
 	/**

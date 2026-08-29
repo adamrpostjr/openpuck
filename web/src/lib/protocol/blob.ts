@@ -94,6 +94,8 @@ export interface TypeConfig {
  * pucks, so every one of these is checked before the field it guards is read.
  */
 export interface Caps {
+	/** v15: in-panel firmware updates. Older pucks need one manual UF2 DFU flash first. */
+	panelUpdate: boolean;
 	/** v16: the op-0x11 lizard-map dump exists. Sending it blind to older firmware wedges the endpoint. */
 	lizard: boolean;
 	/** v18: back4 + D-pad chords. */
@@ -178,6 +180,7 @@ export function parseBlob(p: Uint8Array): DeviceStatus {
 	const up = !!p[11];
 
 	const caps: Caps = {
+		panelUpdate: protocol >= 15,
 		lizard: protocol >= 16,
 		dpadChords: protocol >= 18 && p.length > 183,
 		gyroMap: protocol >= 19 && p.length > 184,

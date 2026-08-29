@@ -84,6 +84,11 @@ class DeviceState {
 		return this.conn === 'connected';
 	}
 
+	/** For the firmware runner, which needs the raw endpoint discipline. */
+	get transportRef() {
+		return this.transport;
+	}
+
 	get caps() {
 		return this.status?.caps ?? null;
 	}

@@ -15,10 +15,19 @@
 				currently running.
 			</InfoPopover>
 		{/snippet}
-		<div class="grid grid-cols-3 gap-2">
+		<div class="grid grid-cols-2 gap-2">
 			<Stat label="Firmware build" value={status?.build.id} />
 			<Stat label="Status protocol" value={status ? `v${status.protocol}` : null} />
-			<Stat label="Git tree" value={status ? (status.build.dirty ? 'dirty' : 'clean') : null} tone={status ? (status.build.dirty ? 'warn' : 'up') : 'none'} />
+			<Stat
+				label="Git tree"
+				value={status ? (status.build.dirty ? 'dirty' : 'clean') : null}
+				tone={status ? (status.build.dirty ? 'warn' : 'up') : 'none'}
+			/>
+			<Stat
+				label="Panel update"
+				value={status ? (status.caps.panelUpdate ? 'supported' : 'manual UF2 only') : null}
+				tone={status && !status.caps.panelUpdate ? 'warn' : 'none'}
+			/>
 		</div>
 	</Panel>
 

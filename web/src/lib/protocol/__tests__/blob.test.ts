@@ -61,8 +61,17 @@ describe('parseBlob', () => {
 		expect(crash.reset).toMatchObject({ name: 'watchdog (hang)', isFault: true, hangStageName: 'haptic' });
 	});
 
+	it('gates panel updates off below v15', () => {
+		const p = buildBlob();
+		p[0] = 14;
+		expect(parseBlob(p).caps.panelUpdate).toBe(false);
+		p[0] = 15;
+		expect(parseBlob(p).caps.panelUpdate).toBe(true);
+	});
+
 	it('gates the post-v17 features off on a v17 puck', () => {
 		expect(s.caps).toMatchObject({
+			panelUpdate: true,
 			lizard: true,
 			typeConfig: true,
 			slots: true,
