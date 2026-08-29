@@ -11,25 +11,31 @@
 	import Mapping from '$lib/sections/Mapping.svelte';
 	import Feel from '$lib/sections/Feel.svelte';
 	import Desktop from '$lib/sections/Desktop.svelte';
-	import Firmware from '$lib/sections/Firmware.svelte';
-	import Diagnostics from '$lib/sections/Diagnostics.svelte';
-	import Sniffer from '$lib/sections/Sniffer.svelte';
 	import { ui, type SectionId } from '$lib/state/ui.svelte';
+	import type { Component } from 'svelte';
 	import { device, supported } from '$lib/state/device.svelte';
 	import { logs } from '$lib/state/log.svelte';
 
-	const SECTION_COMPONENTS = {
+	const EAGER = {
 		overview: Overview,
 		modes: Modes,
 		mapping: Mapping,
 		feel: Feel,
 		desktop: Desktop,
-		firmware: Firmware,
-		diagnostics: Diagnostics,
-		sniffer: Sniffer,
-	} satisfies Record<SectionId, unknown>;
+	};
 
-	const Current = $derived(SECTION_COMPONENTS[ui.section]);
+	/**
+	 * Firmware (UF2 parsing, CRC, the release list), Diagnostics and the sniffer
+	 * are occasional and carry most of the weight, so they are fetched the first
+	 * time they are opened rather than on every page load.
+	 */
+	const LAZY: Record<string, () => Promise<{ default: Component }>> = {
+		firmware: () => import('$lib/sections/Firmware.svelte'),
+		diagnostics: () => import('$lib/sections/Diagnostics.svelte'),
+		sniffer: () => import('$lib/sections/Sniffer.svelte'),
+	};
+
+	const Current = $derived(EAGER[ui.section as keyof typeof EAGER]);
 
 	/** Sections with nothing to show until a puck is attached. */
 	const NEEDS_PUCK = new Set<SectionId>(['overview', 'modes', 'mapping', 'feel', 'desktop', 'firmware', 'diagnostics']);
@@ -69,7 +75,17 @@
 			<main class="min-w-0 flex-1 overflow-y-auto p-3 sm:p-4">
 				<div class="mx-auto max-w-[1600px]">
 					{#if device.connected || !NEEDS_PUCK.has(ui.section)}
-						<Current />
+						{#if Current}
+							<Current />
+						{:else}
+							{#await LAZY[ui.section]()}
+								<p class="text-app-muted p-6 text-sm">Loading…</p>
+							{:then mod}
+								<mod.default />
+							{:catch err}
+								<p class="text-error-700-300 p-6 text-sm">Could not load this section: {err.message}</p>
+							{/await}
+						{/if}
 					{:else}
 						<div class="flex flex-col items-center justify-center py-24 text-center">
 							<h1 class="mb-2 text-lg font-semibold">Connect your puck</h1>

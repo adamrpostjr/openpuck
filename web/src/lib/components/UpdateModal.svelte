@@ -10,7 +10,18 @@
 	the same endpoint. This covers everything until the run ends.
 -->
 {#if m.open}
-	<div class="fixed inset-0 z-100 flex items-center justify-center bg-black/70 p-4">
+	<!--
+		No Escape handler while an update is running: dismissing the only surface
+		reporting a flash in progress would leave the transfer running unseen.
+		It becomes closable once the run finishes.
+	-->
+	<div
+		class="fixed inset-0 z-100 flex items-center justify-center bg-black/70 p-4"
+		role="alertdialog"
+		aria-modal="true"
+		aria-live="polite"
+		aria-label={m.title}
+	>
 		<div class="bg-app-card border-app-line rounded-container w-[min(500px,92vw)] border p-6 shadow-2xl">
 			<h3 class="mb-1 text-base font-semibold" class:text-error-700-300={m.failed}>{m.title}</h3>
 			<p class="mt-2 text-sm">{m.stage}</p>

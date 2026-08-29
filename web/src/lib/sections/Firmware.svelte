@@ -7,6 +7,7 @@
 	import { releases, relAsset, REL_REPO, type Release } from '$lib/state/releases.svelte';
 	import { compareVersions, imagePanelUpdatable, uf2ToImage } from '$lib/protocol/firmware';
 	import { logs } from '$lib/state/log.svelte';
+	import ConfirmDialog, { type ConfirmSpec } from '$lib/components/ConfirmDialog.svelte';
 	import Panel from '$lib/components/Panel.svelte';
 	import InfoPopover from '$lib/components/InfoPopover.svelte';
 
@@ -249,15 +250,14 @@
 	{/if}
 </div>
 
-{#if pending}
-	<div class="fixed inset-0 z-100 flex items-center justify-center bg-black/70 p-4">
-		<div class="bg-app-card border-app-line rounded-container w-[min(460px,92vw)] border p-5 shadow-2xl">
-			<h3 class="mb-2 text-base font-semibold">{pending.title}</h3>
-			<p class="text-app-muted text-sm">{pending.confirm}</p>
-			<div class="mt-4 flex justify-end gap-2">
-				<button type="button" class="btn preset-tonal-surface btn-sm" onclick={() => (pending = null)}>Cancel</button>
-				<button type="button" class="btn preset-filled-primary-500 btn-sm" onclick={run}>Flash</button>
-			</div>
-		</div>
-	</div>
-{/if}
+<ConfirmDialog
+	spec={pending
+		? {
+				title: pending.title,
+				body: [pending.confirm],
+				confirmLabel: 'Flash',
+				onConfirm: run,
+			}
+		: null}
+	onCancel={() => (pending = null)}
+/>
