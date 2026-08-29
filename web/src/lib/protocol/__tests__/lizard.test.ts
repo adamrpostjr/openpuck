@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+	bindingProblem,
 	decodeBindings,
+	describeOutput,
+	describeTrigger,
 	encodeBinding,
 	filterSavable,
 	LZO,
@@ -85,5 +88,64 @@ describe('lizard bindings', () => {
 	it('offers a keycode table with no duplicate values', () => {
 		const values = LZ_KEYS.map(([v]) => v);
 		expect(new Set(values).size).toBe(values.length);
+	});
+});
+
+describe('binding descriptions', () => {
+	const d = (b: Partial<LizardBinding>): LizardBinding => ({
+		outType: LZO.KBD,
+		od: [0, 0, 0, 0, 0, 0, 0],
+		trig: 0,
+		hold: 0,
+		...b,
+	});
+
+	it('describes a modifier combo', () => {
+		expect(describeOutput(d({ od: [0x03, 0x06, 0, 0, 0, 0, 0] }))).toBe('Ctrl + Shift + C');
+	});
+
+	it('describes a modifier-only binding', () => {
+		expect(describeOutput(d({ od: [0x04, 0, 0, 0, 0, 0, 0] }))).toBe('Alt');
+	});
+
+	it('says so when a keyboard binding has nothing set', () => {
+		expect(describeOutput(d({}))).toBe('no key set');
+	});
+
+	it('describes the non-keyboard outputs', () => {
+		expect(describeOutput(d({ outType: LZO.MBTN, od: [2, 0, 0, 0, 0, 0, 0] }))).toBe('Right click');
+		expect(describeOutput(d({ outType: LZO.CONSUMER, od: [2, 0, 0, 0, 0, 0, 0] }))).toBe('Volume −');
+		expect(describeOutput(d({ outType: LZO.SCROLL }))).toBe('Scroll wheel');
+		expect(describeOutput(d({ outType: LZO.NONE }))).toBe('disabled');
+	});
+
+	it('describes triggers with and without a hold', () => {
+		expect(describeTrigger(d({ trig: 0x1 }))).toBe('A');
+		expect(describeTrigger(d({ trig: 0x1, hold: 0x20000 }))).toBe('A + hold L4 (back upper-left)');
+		expect(describeTrigger(d({ hold: 0x20000 }))).toBe('hold L4 (back upper-left)');
+		expect(describeTrigger(d({}))).toBe('');
+	});
+
+	it('describes an analog source instead of a trigger', () => {
+		expect(describeTrigger(d({ outType: LZO.AXIS, od: [0, 0, 0, 0, 0, 0, 0] }))).toBe('Right trackpad');
+		expect(describeTrigger(d({ outType: LZO.AXIS, od: [2, 1, 0, 0, 0, 0, 0] }))).toBe(
+			'Gyro, while right pad touched',
+		);
+		expect(describeTrigger(d({ outType: LZO.SCROLL }))).toBe('Left trackpad');
+	});
+
+	it('flags exactly the rows filterSavable would drop', () => {
+		const orphan = d({ trig: 0, hold: 0, od: [0x01, 0x06, 0, 0, 0, 0, 0] });
+		const disabled = d({ outType: LZO.NONE, trig: 0x1 });
+		const good = d({ trig: 0x1, od: [0x01, 0x06, 0, 0, 0, 0, 0] });
+		expect(bindingProblem(orphan)).toMatch(/No trigger/);
+		expect(bindingProblem(disabled)).toMatch(/Disabled/);
+		expect(bindingProblem(good)).toBeNull();
+		// The flag and the save filter must agree, or the UI lies about what saves.
+		expect(filterSavable([orphan, disabled, good])).toEqual([good]);
+	});
+
+	it('flags a keyboard row with a trigger but no key', () => {
+		expect(bindingProblem(d({ trig: 0x1 }))).toMatch(/No key/);
 	});
 });

@@ -165,3 +165,59 @@ export function encodeBinding(index: number, b: LizardBinding): number[] {
 		h & 0xff, (h >>> 8) & 0xff, (h >>> 16) & 0xff, (h >>> 24) & 0xff,
 	];
 }
+
+const label = (table: [number, string][], v: number, fallback = '?') =>
+	table.find(([k]) => k === v)?.[1] ?? fallback;
+
+/**
+ * What fires the binding, as readable text: "A", "A + hold L4", or the analog
+ * source for outputs that have no trigger.
+ */
+export function describeTrigger(b: LizardBinding): string {
+	if (isAnalog(b)) {
+		if (b.outType === LZO.SCROLL) return 'Left trackpad';
+		const src = label(LZ_AXIS_SRC, b.od[0] ?? 0, 'source');
+		// Gyro is the only source with an activation condition.
+		if ((b.od[0] ?? 0) === 2) return `${src}, ${label(LZ_GYRO_ACT, b.od[1] ?? 0).toLowerCase()}`;
+		return src;
+	}
+	const trig = btnLabel(b.trig);
+	const hold = btnLabel(b.hold);
+	if (!trig && !hold) return '';
+	if (trig && hold) return `${trig} + hold ${hold}`;
+	return trig || `hold ${hold}`;
+}
+
+/** What the binding does, as readable text: "Ctrl + C", "Left click", "Volume +". */
+export function describeOutput(b: LizardBinding): string {
+	switch (b.outType) {
+		case LZO.KBD: {
+			const mods = LZ_MODS.filter(([bit]) => b.od[0] & bit).map(([, name]) => name);
+			const key = b.od[1] ? label(LZ_KEYS, b.od[1], `0x${b.od[1].toString(16)}`) : '';
+			if (!mods.length && !key) return 'no key set';
+			return [...mods, key].filter(Boolean).join(' + ');
+		}
+		case LZO.MBTN:
+			return label(LZ_MBTNS, b.od[0] || 1);
+		case LZO.AXIS:
+			return 'Mouse move';
+		case LZO.SCROLL:
+			return 'Scroll wheel';
+		case LZO.CONSUMER:
+			return label(LZ_CONSUMER, b.od[0] || 1);
+		default:
+			return 'disabled';
+	}
+}
+
+/**
+ * Why a row would be dropped on save, or null if it is fine. Surfacing this on
+ * the row means an incomplete binding is visible while editing, rather than
+ * only appearing as a "skipped N" note in the log after saving.
+ */
+export function bindingProblem(b: LizardBinding): string | null {
+	if (b.outType === LZO.NONE) return 'Disabled — will not be saved';
+	if (isDigital(b) && !(b.trig >>> 0) && !(b.hold >>> 0)) return 'No trigger — will not be saved';
+	if (b.outType === LZO.KBD && !(b.od[0] & 0x0f) && !b.od[1]) return 'No key or modifier set';
+	return null;
+}
