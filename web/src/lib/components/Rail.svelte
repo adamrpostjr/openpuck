@@ -32,9 +32,8 @@
 </script>
 
 <nav
-	class="border-app-line bg-app-chrome flex shrink-0 flex-col gap-1 border-r p-2 transition-[width]"
-	class:w-44={!ui.railCollapsed}
-	class:w-14={ui.railCollapsed}
+	class="border-app-line bg-app-chrome hidden shrink-0 flex-col gap-1 border-r p-2 transition-[width] lg:flex
+		{ui.railCollapsed ? 'w-14' : 'w-14 xl:w-44'}"
 	aria-label="Sections"
 >
 	{#each SECTIONS.filter((s) => !device.isDongle || DONGLE_SECTIONS.includes(s.id)) as s (s.id)}
@@ -56,9 +55,11 @@
 		>
 			<SectionIcon size={16} class="shrink-0" />
 			{#if !ui.railCollapsed}
-				<span class="truncate">{s.label}</span>
+				<span class="hidden truncate xl:inline">{s.label}</span>
 				{#if locked}
-					<span class="text-warning-700-300 ml-auto text-[10px] font-semibold tracking-wide uppercase">beta</span>
+					<span class="text-warning-700-300 ml-auto hidden text-[10px] font-semibold tracking-wide uppercase xl:inline">
+						beta
+					</span>
 				{/if}
 			{/if}
 		</button>
@@ -67,7 +68,7 @@
 	<button
 		type="button"
 		onclick={() => (ui.railCollapsed = !ui.railCollapsed)}
-		class="text-app-muted hover:text-app-strong rounded-base mt-auto flex items-center gap-2.5 px-2.5 py-2 text-left text-xs"
+		class="text-app-muted hover:text-app-strong rounded-base mt-auto hidden items-center gap-2.5 px-2.5 py-2 text-left text-xs xl:flex"
 		aria-label={ui.railCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
 	>
 		{#if ui.railCollapsed}

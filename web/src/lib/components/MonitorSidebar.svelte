@@ -15,8 +15,8 @@
 	buried as the 4th of 12 cards. These six are the glanceable per-controller
 	readings; the deep global telemetry lives in Diagnostics.
 -->
-<aside class="border-app-line bg-app-chrome w-72 shrink-0 overflow-y-auto border-l p-3">
-	<h2 class="text-app-muted mb-3 text-xs font-semibold tracking-[0.08em] uppercase">Link status</h2>
+<aside class="border-app-line bg-app-chrome shrink-0 overflow-y-auto border-t p-3 lg:w-72 lg:border-t-0 lg:border-l">
+	<h2 class="text-app-muted mb-2 text-xs font-semibold tracking-[0.08em] uppercase">Link status</h2>
 
 	{#if !status}
 		<p class="text-app-muted text-sm">No device connected.</p>
@@ -40,7 +40,7 @@
 			</div>
 		{/if}
 
-		<div class="grid grid-cols-2 gap-2">
+		<div class="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-2">
 			<Stat label="RF link" value={slot?.up ? 'up' : 'down'} tone={slot?.up ? 'up' : 'down'} />
 			<Stat label="Battery" value={slot?.up && slot.battery ? `${slot.battery}%` : null} />
 			<Stat label="Signal" value={slot?.up && slot.rssi ? `-${slot.rssi} dBm` : null} />

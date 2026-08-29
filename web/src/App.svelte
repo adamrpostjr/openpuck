@@ -62,11 +62,11 @@
 			</div>
 		</div>
 	{:else}
-		<div class="flex min-h-0 flex-1">
+		<div class="flex min-h-0 flex-1 flex-col lg:flex-row">
 			<!-- The rail stays available with no puck attached: the sniffer is a
 			     separate board and must be reachable on its own. -->
 			<Rail />
-			<main class="min-w-0 flex-1 overflow-y-auto p-4">
+			<main class="min-w-0 flex-1 overflow-y-auto p-3 sm:p-4">
 				<div class="mx-auto max-w-[1600px]">
 					{#if device.connected || !NEEDS_PUCK.has(ui.section)}
 						<Current />

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import CheckIcon from '@lucide/svelte/icons/check';
+	import MenuIcon from '@lucide/svelte/icons/menu';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import MoonIcon from '@lucide/svelte/icons/moon';
 	import PanelsTopLeftIcon from '@lucide/svelte/icons/panels-top-left';
@@ -8,7 +9,7 @@
 	import UsbIcon from '@lucide/svelte/icons/usb';
 	import { Menu, Portal } from '@skeletonlabs/skeleton-svelte';
 	import { device } from '$lib/state/device.svelte';
-	import { ui } from '$lib/state/ui.svelte';
+	import { DONGLE_SECTIONS, SECTIONS, ui } from '$lib/state/ui.svelte';
 	import { panels, type PanelId } from '$lib/state/panels.svelte';
 	import { theme } from '$lib/state/theme.svelte';
 	import { DEBUG_CDC_FIELD, FACTORY_ERASE_CMD, OP, WIPE_BOARD_CMD } from '$lib/protocol/fields';
@@ -128,16 +129,45 @@
 	const PANEL_LABELS: Record<PanelId, string> = { logs: 'Logs', capture: 'Capture', trail: 'Loop trail' };
 </script>
 
-<header class="border-app-line bg-app-chrome flex shrink-0 items-center gap-3 border-b px-4 py-2">
-	<span class="font-bold tracking-tight">OpenPuck</span>
+<header
+	class="border-app-line bg-app-chrome flex shrink-0 items-center gap-2 overflow-x-auto border-b px-3 py-2 whitespace-nowrap sm:gap-3 sm:px-4"
+>
+	<!-- Below lg the layout stacks and the rail is hidden, so navigation lives
+	     here instead. -->
+	<Menu>
+		<Menu.Trigger class="btn preset-tonal-surface flex items-center gap-1 px-2 text-sm lg:hidden" aria-label="Sections">
+			<MenuIcon size={16} />
+			<ChevronDownIcon size={12} />
+		</Menu.Trigger>
+		<Portal>
+			<Menu.Positioner class="z-50">
+				<Menu.Content class="bg-app-card border-app-line rounded-container min-w-44 border p-1 shadow-xl">
+					{#each SECTIONS.filter((x) => !device.isDongle || DONGLE_SECTIONS.includes(x.id)) as x (x.id)}
+						{@const Icon = x.icon}
+						<Menu.Item
+							value={x.id}
+							onclick={() => ui.go(x.id)}
+							class="rounded-base hover:bg-app-hover flex cursor-pointer items-center gap-2 px-2.5 py-1.5 text-sm
+								{ui.section === x.id ? 'text-primary-700-300' : ''}"
+						>
+							<Icon size={15} />
+							{x.label}
+						</Menu.Item>
+					{/each}
+				</Menu.Content>
+			</Menu.Positioner>
+		</Portal>
+	</Menu>
+
+	<span class="shrink-0 font-bold tracking-tight">OpenPuck</span>
 
 	{#if device.demo}
-		<span class="bg-warning-100-900 text-warning-700-300 rounded-full px-2 py-0.5 text-xs font-semibold">
-			demo data — no device
+		<span class="bg-warning-100-900 text-warning-700-300 shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold">
+			demo data<span class="hidden sm:inline">&nbsp;— no device</span>
 		</span>
 	{:else}
 		<span
-			class="rounded-full px-2 py-0.5 text-xs font-semibold
+			class="shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold
 			{device.connected ? 'bg-success-100-900 text-success-700-300' : 'bg-error-100-900 text-error-700-300'}"
 		>
 			{CONN_LABEL[device.conn]}
@@ -150,10 +180,12 @@
 		</span>
 		{#if device.serial}<span class="text-app-muted text-xs">{device.serial}</span>{/if}
 	{:else if status}
-		<span class="text-app-strong rounded-base bg-app-well border-app-line border px-2 py-0.5 text-xs">
+		<span
+			class="text-app-strong rounded-base bg-app-well border-app-line hidden shrink-0 border px-2 py-0.5 text-xs sm:inline"
+		>
 			{status.modeName}
 		</span>
-		<span class="text-app-muted text-xs">fw {status.build.id || '—'}</span>
+		<span class="text-app-muted hidden text-xs sm:inline">fw {status.build.id || '—'}</span>
 	{/if}
 
 	<div class="flex-1"></div>
@@ -161,7 +193,7 @@
 	<Menu>
 		<Menu.Trigger class="btn preset-tonal-surface flex items-center gap-1.5 text-sm">
 			<PanelsTopLeftIcon size={15} />
-			Panels
+			<span class="hidden lg:inline">Panels</span>
 			<ChevronDownIcon size={13} />
 		</Menu.Trigger>
 		<Portal>
@@ -209,7 +241,7 @@
 	<Menu>
 		<Menu.Trigger class="btn preset-tonal-surface flex items-center gap-1.5 text-sm">
 			<UsbIcon size={15} />
-			Device
+			<span class="hidden lg:inline">Device</span>
 			<ChevronDownIcon size={13} />
 		</Menu.Trigger>
 		<Portal>
@@ -239,7 +271,7 @@
 		onclick={() => device.connect()}
 	>
 		<PlugZapIcon size={15} />
-		{device.connected ? 'Reconnect' : 'Connect'}
+		<span class="hidden sm:inline">{device.connected ? 'Reconnect' : 'Connect'}</span>
 	</button>
 </header>
 
