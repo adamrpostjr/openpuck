@@ -4,6 +4,7 @@
 	import SquareIcon from '@lucide/svelte/icons/square';
 	import { device } from '$lib/state/device.svelte';
 	import { diag } from '$lib/state/diag.svelte';
+	import InfoPopover from '$lib/components/InfoPopover.svelte';
 	import StreamPanel from './StreamPanel.svelte';
 
 	function download() {
@@ -33,9 +34,19 @@
 		>
 			<SquareIcon size={12} /> Stop
 		</button>
+		<span class="ml-auto">
+			<InfoPopover title="Capture — host → controller commands">
+				The firmware logs everything from boot into a big RAM ring: Steam's writes (<code>ifN</code>), the frames we
+				transmit to the controller (<code>TX→ctlr</code>), and RF <code>LINK UP/DOWN</code> edges. For the reconnect
+				buzz: trigger it (it appears moments after the puck boots / the controller reconnects), then connect here and
+				click <b>Dump from boot</b> — the trigger is still in the ring. Dump streams the whole ring (oldest→newest) and
+				then keeps live-updating until you press Stop. <code>cmd</code> is the command/report byte, then the raw bytes.
+				(Only present in a logging build, <code>-DOPK_LOG=1</code>.)
+			</InfoPopover>
+		</span>
 		<button
 			type="button"
-			class="text-app-muted hover:text-app-strong ml-auto px-1"
+			class="text-app-muted hover:text-app-strong px-1"
 			title="Download .txt"
 			aria-label="Download capture"
 			disabled={!diag.capLines.length}

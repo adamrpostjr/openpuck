@@ -148,7 +148,8 @@
 				Test rumble
 			</button>
 			<span class="text-app-muted text-xs">
-				Buzzes every connected controller for half a second, so you can compare styles without launching a game.
+				Buzzes every connected controller for half a second at the settings above, so you can compare styles without
+				launching a game.
 			</span>
 		</div>
 	</Panel>

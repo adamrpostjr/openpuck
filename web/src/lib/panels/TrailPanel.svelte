@@ -1,13 +1,19 @@
 <script lang="ts">
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import { trail } from '$lib/state/trail.svelte';
+	import InfoPopover from '$lib/components/InfoPopover.svelte';
 	import StreamPanel from './StreamPanel.svelte';
 </script>
 
 <StreamPanel id="trail" title="Loop trail" badge={`${trail.entries.length}`}>
 	{#snippet toolbar()}
-		<span class="text-app-muted text-xs">
-			Every loop-state change, kept in this browser — survives refreshes and reboots.
+		<span class="text-app-muted flex items-center gap-1.5 text-xs">
+			Every loop-state change, timestamped.
+			<InfoPopover title="Loop-state trail">
+				Stall episodes, live wedge reports, heartbeat loss (hard wedge, USB silent), recoveries, disconnects and the
+				reset cause on reconnect — so an unattended hang is recorded even if you weren't watching. Saved in this browser
+				(localStorage): it <strong>survives page refreshes</strong> and device reboots, and clears only with the button.
+			</InfoPopover>
 		</span>
 		<button
 			type="button"

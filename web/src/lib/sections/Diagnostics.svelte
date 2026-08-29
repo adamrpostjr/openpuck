@@ -37,7 +37,9 @@
 		{#snippet info()}
 			<InfoPopover title="Global telemetry">
 				Sums over all controllers; the sidebar shows the selected controller's own rates. Polls/s ≈ 250 expected; it's
-				capped by the loop period (≈4000 µs needed).
+				capped by Loop period (≈4000 µs needed). "Slowest stage" is the loop section eating the most time per iteration.
+				Poll TX and RF-fail counts show even when the link reads down, so a wedge stays diagnosable: polls above zero
+				while Delivered reads "—" means the puck is still polling but getting no usable replies.
 			</InfoPopover>
 		{/snippet}
 		<div class="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">

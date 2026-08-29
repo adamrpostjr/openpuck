@@ -60,7 +60,11 @@ export const MODES: ModeDef[] = [
 		name: 'DirectInput (sims)',
 		summary: 'Every analog input live at once, as two joysticks.',
 		detail:
-			'For flight and space sims. DirectInput caps a device at 8 axes, so this presents two: #1 sticks + triggers + 26 buttons, #2 trackpads + gyro. Trackpad axes latch — they hold the last touched position so a pad works as a throttle, and re-centre when you click that pad. No remapping is applied; the sim does the binding. Input only, so rumble is not wired up.',
+			'For flight/space sims: every analog input is live at once, split over two joysticks (#1 sticks + triggers ' +
+			'+ 26 buttons, #2 trackpads + gyro). Trackpad axes hold their last position and re-centre on a pad click. ' +
+			'No remapping is applied in this mode — every physical button, paddles included, is its own bindable ' +
+			'button, since the sim does the binding. The mode is input-only: DirectInput force feedback is a separate ' +
+			'HID class, so rumble is not wired up here.',
 		tags: ['gyro', 'trackpad', 'sims'],
 	},
 	{
@@ -68,7 +72,8 @@ export const MODES: ModeDef[] = [
 		name: 'SInput (SDL native)',
 		summary: 'Open SDL-native protocol; everything at once.',
 		detail:
-			'SDL3 and Steam Input read sticks, both analog triggers, gyro, both trackpads and battery from it natively, with rumble back from the host.',
+			'The open SDL-native protocol — SDL3 / Steam Input read sticks, both analog triggers, gyro, both trackpads ' +
+			'and battery from it natively, with rumble back from the host.',
 		tags: ['gyro', 'trackpad', 'rumble'],
 	},
 ];
