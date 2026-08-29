@@ -15,9 +15,10 @@ export default defineConfig({
 		outDir: 'dist',
 		emptyOutDir: true,
 		rollupOptions: {
-			// docs/sniffer.html is still the original standalone page; it stays
-			// untouched (and working) until it is ported as a second entry.
-			input: { index: resolve(import.meta.dirname, 'index.html') },
+			input: {
+				index: resolve(import.meta.dirname, 'index.html'),
+				sniffer: resolve(import.meta.dirname, 'sniffer.html'),
+			},
 		},
 	},
 	// Relative asset URLs so the same build works at /openpuck/ on Pages and at
