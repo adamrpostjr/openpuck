@@ -48,10 +48,25 @@ export const OP = {
 	/** Controller power-off (0x9F "off!", x3). */
 	controllerOff: 0x08,
 	stabilityBuzz: 0x0f,
+	/** Reboot into serial DFU (adafruit-nrfutil). */
+	dfuSerial: 0x0b,
+	/** Reboot into the UF2 mass-storage bootloader. */
+	dfuUf2: 0x0c,
 	flightRecorder: 0x10,
 	lizardDump: 0x11,
 	rumbleTest: 0x16,
 } as const;
+
+/**
+ * Destructive commands carry a literal payload as a guard, so a stray opcode
+ * cannot trigger one. Factory erase is 0x0A + "ERS"; the full board wipe is
+ * 0x25 + "WIPE".
+ */
+export const FACTORY_ERASE_CMD = [0x0a, 0x45, 0x52, 0x53];
+export const WIPE_BOARD_CMD = [0x25, 0x57, 0x49, 0x50, 0x45];
+
+/** Debug CDC is a config field, not an opcode: it auto-reverts after one boot. */
+export const DEBUG_CDC_FIELD = 20;
 
 /** Rumble styles; names track RUMBLE_STYLE_* in haptics.h, values are the wire values. */
 export const RUMBLE_STYLES: [string, number][] = [

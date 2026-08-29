@@ -11,6 +11,9 @@
 	import { ui } from '$lib/state/ui.svelte';
 	import { panels, type PanelId } from '$lib/state/panels.svelte';
 	import { theme } from '$lib/state/theme.svelte';
+	import { DEBUG_CDC_FIELD, FACTORY_ERASE_CMD, OP, WIPE_BOARD_CMD } from '$lib/protocol/fields';
+	import { logs } from '$lib/state/log.svelte';
+	import ConfirmDialog, { type ConfirmSpec } from '$lib/components/ConfirmDialog.svelte';
 
 	const status = $derived(device.status);
 
@@ -21,16 +24,104 @@
 		lost: 'device lost',
 	};
 
+	let confirming = $state<ConfirmSpec | null>(null);
+
 	// Everything that reboots, erases, or re-enumerates the puck. These sat as
 	// six always-clickable buttons in the old top bar, Factory erase and Wipe
-	// board included, right next to Connect.
-	const DEVICE_ACTIONS = [
-		{ id: 'debugCdc', label: 'Debug CDC', danger: false },
-		{ id: 'dfuSerial', label: 'Serial DFU', danger: false },
-		{ id: 'dfuUf2', label: 'UF2 DFU', danger: false },
-		{ id: 'factoryErase', label: 'Factory erase', danger: true },
-		{ id: 'wipeBoard', label: 'Wipe board', danger: true, debugOnly: true },
+	// board included, right next to Connect. Each now needs a confirmation, and
+	// the two irreversible ones need the exact word typed.
+	const DEVICE_ACTIONS: (Omit<ConfirmSpec, 'onConfirm'> & {
+		id: string;
+		label: string;
+		debugOnly?: boolean;
+		run: () => Promise<void>;
+	})[] = [
+		{
+			id: 'debugCdc',
+			label: 'Debug CDC',
+			title: 'Reboot with the CDC serial console?',
+			body: [
+				'The puck reboots and comes back with a serial port (115200 baud) instead of WebUSB — this panel will disconnect and NOT reconnect until the next reboot.',
+				'Connect a serial monitor to capture logs, then replug (or reboot) to return to normal WebUSB mode. The debug console auto-reverts after one boot.',
+			],
+			confirmLabel: 'Reboot',
+			run: async () => {
+				await device.setField(DEBUG_CDC_FIELD, 1);
+				logs.info('debug-CDC reboot sent — device disconnecting; reconnect a serial monitor at 115200 baud');
+			},
+		},
+		{
+			id: 'dfuSerial',
+			label: 'Serial DFU',
+			title: 'Reboot into serial DFU?',
+			body: ['The puck will disconnect immediately. Flash with adafruit-nrfutil, then replug.'],
+			confirmLabel: 'Reboot',
+			run: async () => {
+				await device.sendRaw([OP.dfuSerial]);
+				logs.info('serial DFU reboot sent — device disconnecting');
+			},
+		},
+		{
+			id: 'dfuUf2',
+			label: 'UF2 DFU',
+			title: 'Reboot into the UF2 bootloader?',
+			body: ['The puck will disconnect and mount as a USB drive. Drag the .uf2 file onto it to flash.'],
+			confirmLabel: 'Reboot',
+			run: async () => {
+				await device.sendRaw([OP.dfuUf2]);
+				logs.info('UF2 bootloader reboot sent — device disconnecting');
+			},
+		},
+		{
+			id: 'factoryErase',
+			label: 'Factory erase',
+			danger: true,
+			title: 'Factory erase?',
+			body: ['This wipes ALL persistent storage on the copycat:'],
+			bullets: [
+				"the paired-controller bond (you'll have to re-pair)",
+				'every saved setting (mode, chords, back paddles, sensitivity)',
+			],
+			typeToConfirm: 'ERASE',
+			confirmLabel: 'Erase everything',
+			run: async () => {
+				await device.sendRaw(FACTORY_ERASE_CMD);
+				logs.warn(
+					'FACTORY ERASE sent — copycat is reformatting and rebooting to defaults. Re-pair the controller, then reconnect.',
+				);
+			},
+		},
+		{
+			id: 'wipeBoard',
+			label: 'Wipe board',
+			danger: true,
+			debugOnly: true,
+			title: 'Wipe the entire board?',
+			body: ['This is NOT a factory reset. It erases:'],
+			bullets: [
+				'the OpenPuck FIRMWARE itself',
+				'every setting (mode, chords, back paddles, sensitivity)',
+				'the paired-controller bond',
+			],
+			typeToConfirm: 'WIPE',
+			confirmLabel: 'Wipe the board',
+			run: async () => {
+				await device.sendRaw(WIPE_BOARD_CMD);
+				logs.warn(
+					'FULL BOARD WIPE sent — the board is erasing firmware + all data (~15-20 s), then reboots as a blank UF2 drive. Flash OpenPuck (.uf2) to restore it.',
+				);
+			},
+		},
 	];
+
+	function pick(a: (typeof DEVICE_ACTIONS)[number]) {
+		if (!device.connected) {
+			logs.warn('not connected');
+			return;
+		}
+		const { id, label, debugOnly, run, ...spec } = a;
+		confirming = { ...spec, onConfirm: () => void run() };
+	}
 
 	const PANEL_LABELS: Record<PanelId, string> = { logs: 'Logs', capture: 'Capture', trail: 'Loop trail' };
 </script>
@@ -121,8 +212,10 @@
 						{#if !a.debugOnly || ui.debug}
 							<Menu.Item
 								value={a.id}
+								onclick={() => pick(a)}
 								class="rounded-base cursor-pointer px-2.5 py-1.5 text-sm
-									{a.danger ? 'text-error-700-300 hover:bg-error-900/40' : 'hover:bg-app-hover'}"
+									{a.danger ? 'text-error-700-300 hover:bg-error-500/15' : 'hover:bg-app-hover'}
+									{device.connected ? '' : 'pointer-events-none opacity-40'}"
 							>
 								{a.label}
 							</Menu.Item>
@@ -142,3 +235,5 @@
 		{device.connected ? 'Reconnect' : 'Connect'}
 	</button>
 </header>
+
+<ConfirmDialog spec={confirming} onCancel={() => (confirming = null)} />
