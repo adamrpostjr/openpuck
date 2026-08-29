@@ -1,7 +1,8 @@
 <script lang="ts">
 	import ChevronsLeftIcon from '@lucide/svelte/icons/chevrons-left';
 	import ChevronsRightIcon from '@lucide/svelte/icons/chevrons-right';
-	import { SECTIONS, ui, type SectionId } from '$lib/state/ui.svelte';
+	import { DONGLE_SECTIONS, SECTIONS, ui, type SectionId } from '$lib/state/ui.svelte';
+	import { device } from '$lib/state/device.svelte';
 	import ConfirmDialog, { type ConfirmSpec } from '$lib/components/ConfirmDialog.svelte';
 
 	let confirming = $state<ConfirmSpec | null>(null);
@@ -36,8 +37,10 @@
 	class:w-14={ui.railCollapsed}
 	aria-label="Sections"
 >
-	{#each SECTIONS as s (s.id)}
-		{@const locked = s.beta && !ui.beta}
+	{#each SECTIONS.filter((s) => !device.isDongle || DONGLE_SECTIONS.includes(s.id)) as s (s.id)}
+		<!-- Flashing a dongle is a primary use, so its Firmware section is not
+		     beta-gated the way a puck's is. -->
+		{@const locked = s.beta && !ui.beta && !device.isDongle}
 		{@const SectionIcon = s.icon}
 		<button
 			type="button"

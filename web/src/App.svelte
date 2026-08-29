@@ -31,7 +31,11 @@
 
 	// One-shot bootstrap. In an $effect this would read and write the same state
 	// and loop forever.
-	if (new URLSearchParams(location.search).get('fixture') === 'true') {
+	const fixture = new URLSearchParams(location.search).get('fixture');
+	if (fixture === 'dongle') {
+		device.loadDongleFixture();
+		logs.ok('loaded ReversePuck fixture (no device attached)');
+	} else if (fixture === 'true') {
 		device.loadFixture();
 		logs.ok('loaded v17 fixture (no device attached)');
 	} else if (supported) {
@@ -76,7 +80,7 @@
 					<Current />
 				</div>
 			</main>
-			{#if ui.monitorOpen}
+			{#if ui.monitorOpen && !device.isDongle}
 				<MonitorSidebar />
 			{/if}
 		</div>

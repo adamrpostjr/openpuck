@@ -1,5 +1,5 @@
 import { parseBlob, STAGE_NAMES, type DeviceStatus } from '$lib/protocol/blob';
-import { buildBlob, FIXTURE_LIZARD } from '$lib/protocol/fixtures';
+import { buildBlob, buildDongleFrame, FIXTURE_LIZARD } from '$lib/protocol/fixtures';
 import { Transport, MARK_BONDS, MARK_PAIRED } from '$lib/usb/transport';
 import {
 	BK_OP,
@@ -18,6 +18,7 @@ import { decodeBindings, encodeBinding, filterSavable, LZ_MAX, LZ_OP, type Lizar
 import { logs } from '$lib/state/log.svelte';
 import { trail } from '$lib/state/trail.svelte';
 import { diag } from '$lib/state/diag.svelte';
+import { DONGLE_OP, parseDongleStatus, type DongleStatus } from '$lib/protocol/dongle';
 
 export type ConnState = 'disconnected' | 'connecting' | 'connected' | 'lost';
 
@@ -36,6 +37,8 @@ class DeviceState {
 	status = $state<DeviceStatus | null>(null);
 	/** True for a ReversePuck controller dongle (28DE:1302). */
 	isDongle = $state(false);
+	/** Populated instead of `status` while a dongle is connected. */
+	dongle = $state<DongleStatus | null>(null);
 	serial = $state('');
 	activeSlot = $state(0);
 	/** Set when no status blob has arrived for longer than the timeout. */
@@ -75,6 +78,7 @@ class DeviceState {
 			{
 				onOpen: ({ isDongle, serial }) => {
 					this.isDongle = isDongle;
+					this.dongle = null;
 					this.serial = serial;
 					this.conn = 'connected';
 					this.hardWedge = null;
@@ -147,6 +151,13 @@ class DeviceState {
 	}
 
 	/** Write one config field, then re-read so the UI reflects what stuck. */
+	/** Un-bond a paired puck from the dongle. */
+	async removePairedPuck(slot: number) {
+		await this.transport.send([DONGLE_OP.removePuck, slot & 0xff]);
+		logs.info(`removed paired puck slot ${slot}`);
+		// The firmware replies with a fresh 0xAC; the next poll refreshes the list.
+	}
+
 	async setField(field: number, value: number) {
 		await this.transport.send([0x02, field, value & 0xff]);
 		const p = await this.transport.readBlob();
@@ -236,7 +247,15 @@ class DeviceState {
 			await this.transport.send([0x01]);
 			if (this.isDongle) {
 				const p = await this.transport.readFrame(MARK_PAIRED, 3, 256);
-				if (p) this.lastBlob = p;
+				if (p) {
+					this.lastBlob = p;
+					this.lastBlobTs = Date.now();
+					this.hardWedge = null;
+					// A dongle reconnect closes out the row queued on disconnect;
+					// it reports no reset cause to classify it with.
+					this.pendingHang = null;
+					this.dongle = parseDongleStatus(p);
+				}
 			} else {
 				const p = await this.transport.readBlob();
 				if (p) this.applyBlob(p);
@@ -538,6 +557,24 @@ class DeviceState {
 		this.conn = 'connected';
 		this.lizardLoaded = true; // no device to dump from
 		this.lizard = structuredClone(FIXTURE_LIZARD);
+	}
+
+	/** Renders the reduced ReversePuck layout without a dongle attached. */
+	loadDongleFixture() {
+		diag.bind({
+			get connected() {
+				return device.connected;
+			},
+			busy: this.busy,
+			sendRaw: (b) => this.sendRaw(b),
+			readRaw: (n) => this.transport.readRaw(n),
+		});
+		this.demo = true;
+		this.conn = 'connected';
+		this.isDongle = true;
+		// A dongle answers 0xAC only; it has no status blob, so `status` stays
+		// null exactly as it would with real hardware.
+		this.dongle = parseDongleStatus(buildDongleFrame());
 	}
 }
 

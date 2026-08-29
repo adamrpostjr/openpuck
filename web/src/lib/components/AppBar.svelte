@@ -34,6 +34,7 @@
 		id: string;
 		label: string;
 		debugOnly?: boolean;
+		puckOnly?: boolean;
 		run: () => Promise<void>;
 	})[] = [
 		{
@@ -75,6 +76,7 @@
 		{
 			id: 'factoryErase',
 			label: 'Factory erase',
+			puckOnly: true,
 			danger: true,
 			title: 'Factory erase?',
 			body: ['This wipes ALL persistent storage on the copycat:'],
@@ -119,7 +121,7 @@
 			logs.warn('not connected');
 			return;
 		}
-		const { id, label, debugOnly, run, ...spec } = a;
+		const { id, label, debugOnly, puckOnly, run, ...spec } = a;
 		confirming = { ...spec, onConfirm: () => void run() };
 	}
 
@@ -142,7 +144,12 @@
 		</span>
 	{/if}
 
-	{#if status}
+	{#if device.isDongle}
+		<span class="text-app-strong rounded-base bg-app-well border-app-line border px-2 py-0.5 text-xs">
+			ReversePuck
+		</span>
+		{#if device.serial}<span class="text-app-muted text-xs">{device.serial}</span>{/if}
+	{:else if status}
 		<span class="text-app-strong rounded-base bg-app-well border-app-line border px-2 py-0.5 text-xs">
 			{status.modeName}
 		</span>
@@ -209,7 +216,7 @@
 			<Menu.Positioner class="z-50">
 				<Menu.Content class="bg-app-card border-app-line rounded-container min-w-52 border p-1 shadow-xl">
 					{#each DEVICE_ACTIONS as a (a.id)}
-						{#if !a.debugOnly || ui.debug}
+						{#if (!a.debugOnly || ui.debug) && !(a.puckOnly && device.isDongle)}
 							<Menu.Item
 								value={a.id}
 								onclick={() => pick(a)}

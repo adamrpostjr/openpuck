@@ -164,85 +164,89 @@
 		</div>
 	</Panel>
 
-	<Panel title="Update from a release" disabled={gated}>
-		{#snippet actions()}
-			<button
-				type="button"
-				class="btn preset-tonal-surface btn-sm flex items-center gap-1.5"
-				onclick={() => releases.load(true)}
-			>
-				<RefreshCwIcon size={13} /> Refresh
-			</button>
-		{/snippet}
-		{#snippet info()}
-			<InfoPopover title="Releases">
-				Official builds from github.com/{REL_REPO}/releases. <strong>Factory reset</strong> flashes the
-				<code>-factory-reset</code> build of that version: on its first boot it wipes ALL settings and the controller pairing
-				(you must re-pair), then behaves like the standard build. Use it to recover from a bad config or stale bond.
-			</InfoPopover>
-		{/snippet}
+	{#if !device.isDongle}
+		<Panel title="Update from a release" disabled={gated}>
+			{#snippet actions()}
+				<button
+					type="button"
+					class="btn preset-tonal-surface btn-sm flex items-center gap-1.5"
+					onclick={() => releases.load(true)}
+				>
+					<RefreshCwIcon size={13} /> Refresh
+				</button>
+			{/snippet}
+			{#snippet info()}
+				<InfoPopover title="Releases">
+					Official builds from github.com/{REL_REPO}/releases. <strong>Factory reset</strong> flashes the
+					<code>-factory-reset</code> build of that version: on its first boot it wipes ALL settings and the controller pairing
+					(you must re-pair), then behaves like the standard build. Use it to recover from a bad config or stale bond.
+				</InfoPopover>
+			{/snippet}
 
-		<p class="text-app-muted mb-2 text-xs">
-			Installed: <b class="text-secondary-700-300">{installed || '—'}</b>
-		</p>
-
-		{#if releases.loading}
-			<p class="text-app-muted text-sm">Loading…</p>
-		{:else if releases.error}
-			<p class="text-app-muted text-sm">
-				Could not load releases ({releases.error}) —
-				<a
-					class="text-primary-700-300 underline"
-					href="https://github.com/{REL_REPO}/releases"
-					target="_blank"
-					rel="noopener">open the releases page</a
-				> and use the local-file card.
+			<p class="text-app-muted mb-2 text-xs">
+				Installed: <b class="text-secondary-700-300">{installed || '—'}</b>
 			</p>
-		{:else if releases.list}
-			<div class="divide-app-line-soft divide-y">
-				{#each releases.list as rel (rel.tag_name)}
-					{@const updatable = releases.panelUpdatable(rel)}
-					<div class="flex flex-wrap items-center gap-3 py-2.5">
-						<span class="w-20 shrink-0 font-semibold">{rel.tag_name}</span>
-						<span class="text-app-muted w-24 shrink-0 text-xs">{fmtDate(rel.published_at)}</span>
-						{#if rel.prerelease}
-							<span class="bg-warning-100-900 text-warning-700-300 rounded-full px-2 py-0.5 text-[10px] font-semibold">
-								pre-release
-							</span>
-						{/if}
-						{#if updatable === false}
-							<span
-								class="bg-warning-100-900 text-warning-700-300 rounded-full px-2 py-0.5 text-[10px] font-semibold"
-								title="After this build, the next update needs UF2 DFU and drag-and-drop."
+
+			{#if releases.loading}
+				<p class="text-app-muted text-sm">Loading…</p>
+			{:else if releases.error}
+				<p class="text-app-muted text-sm">
+					Could not load releases ({releases.error}) —
+					<a
+						class="text-primary-700-300 underline"
+						href="https://github.com/{REL_REPO}/releases"
+						target="_blank"
+						rel="noopener">open the releases page</a
+					> and use the local-file card.
+				</p>
+			{:else if releases.list}
+				<div class="divide-app-line-soft divide-y">
+					{#each releases.list as rel (rel.tag_name)}
+						{@const updatable = releases.panelUpdatable(rel)}
+						<div class="flex flex-wrap items-center gap-3 py-2.5">
+							<span class="w-20 shrink-0 font-semibold">{rel.tag_name}</span>
+							<span class="text-app-muted w-24 shrink-0 text-xs">{fmtDate(rel.published_at)}</span>
+							{#if rel.prerelease}
+								<span
+									class="bg-warning-100-900 text-warning-700-300 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+								>
+									pre-release
+								</span>
+							{/if}
+							{#if updatable === false}
+								<span
+									class="bg-warning-100-900 text-warning-700-300 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+									title="After this build, the next update needs UF2 DFU and drag-and-drop."
+								>
+									no panel updates
+								</span>
+							{/if}
+							<span class="flex-1"></span>
+							<label class="text-app-muted flex shrink-0 items-center gap-1.5 text-xs">
+								<input type="checkbox" class="checkbox" bind:checked={factory[rel.tag_name]} />
+								Factory reset
+							</label>
+							<button
+								type="button"
+								class="btn preset-tonal-surface btn-sm"
+								disabled={gated || !device.connected}
+								onclick={() => flashRelease(rel)}
 							>
-								no panel updates
-							</span>
+								Flash
+							</button>
+						</div>
+						{#if rel.body}
+							<details class="pb-2">
+								<summary class="text-primary-700-300 cursor-pointer text-xs">Release notes</summary>
+								<pre
+									class="bg-app-well border-app-line mt-1 max-h-64 overflow-auto rounded-base border p-2 text-xs whitespace-pre-wrap">{rel.body}</pre>
+							</details>
 						{/if}
-						<span class="flex-1"></span>
-						<label class="text-app-muted flex shrink-0 items-center gap-1.5 text-xs">
-							<input type="checkbox" class="checkbox" bind:checked={factory[rel.tag_name]} />
-							Factory reset
-						</label>
-						<button
-							type="button"
-							class="btn preset-tonal-surface btn-sm"
-							disabled={gated || !device.connected}
-							onclick={() => flashRelease(rel)}
-						>
-							Flash
-						</button>
-					</div>
-					{#if rel.body}
-						<details class="pb-2">
-							<summary class="text-primary-700-300 cursor-pointer text-xs">Release notes</summary>
-							<pre
-								class="bg-app-well border-app-line mt-1 max-h-64 overflow-auto rounded-base border p-2 text-xs whitespace-pre-wrap">{rel.body}</pre>
-						</details>
-					{/if}
-				{/each}
-			</div>
-		{/if}
-	</Panel>
+					{/each}
+				</div>
+			{/if}
+		</Panel>
+	{/if}
 </div>
 
 {#if pending}

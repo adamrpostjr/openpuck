@@ -21,6 +21,13 @@ export interface SectionDef {
 	beta?: boolean;
 }
 
+/**
+ * Sections a ReversePuck dongle has any use for. It emulates a controller
+ * rather than hosting one, so the per-controller config does not apply and the
+ * release list is puck firmware -- it flashes from the local-file card.
+ */
+export const DONGLE_SECTIONS: SectionId[] = ['overview', 'firmware'];
+
 export const SECTIONS: SectionDef[] = [
 	{ id: 'overview', label: 'Overview', icon: GaugeIcon },
 	{ id: 'modes', label: 'Modes', icon: Gamepad2Icon },

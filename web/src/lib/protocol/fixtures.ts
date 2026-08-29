@@ -128,3 +128,24 @@ export const FIXTURE_LIZARD: LizardBinding[] = [
 	// Volume up on D-pad Up.
 	{ outType: LZO.CONSUMER, od: [1, 0, 0, 0, 0, 0, 0], trig: 0x2000, hold: 0 },
 ];
+
+/** A ReversePuck 0xAC frame: two paired pucks, one live, RF link up. */
+export function buildDongleFrame(): Uint8Array {
+	const pucks = [
+		{ slot: 0, alive: true, serial: 'PUCK-A1B2' },
+		{ slot: 1, alive: false, serial: 'PUCK-C3D4' },
+	];
+	const p = new Uint8Array(3 + pucks.length * 26);
+	p[0] = 0xac;
+	p[1] = 0b11; // forwarding + link up
+	p[2] = pucks.length;
+	pucks.forEach((k, i) => {
+		const q = 3 + i * 26;
+		p[q] = k.slot;
+		p[q + 1] = k.alive ? 1 : 0;
+		for (let n = 0; n < 4; n++) p[q + 2 + n] = 0xa0 + n + i;
+		for (let n = 0; n < 4; n++) p[q + 6 + n] = 0xb0 + n + i;
+		for (let n = 0; n < k.serial.length; n++) p[q + 10 + n] = k.serial.charCodeAt(n);
+	});
+	return p;
+}
