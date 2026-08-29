@@ -1,7 +1,33 @@
 <script lang="ts">
 	import ChevronsLeftIcon from '@lucide/svelte/icons/chevrons-left';
 	import ChevronsRightIcon from '@lucide/svelte/icons/chevrons-right';
-	import { SECTIONS, ui } from '$lib/state/ui.svelte';
+	import { SECTIONS, ui, type SectionId } from '$lib/state/ui.svelte';
+	import ConfirmDialog, { type ConfirmSpec } from '$lib/components/ConfirmDialog.svelte';
+
+	let confirming = $state<ConfirmSpec | null>(null);
+
+	// A beta-gated section asks first and enables beta on accept, rather than
+	// just wearing a label. Flashing can leave a puck needing UF2 DFU to
+	// recover, so the warning has to be acknowledged, not merely displayed.
+	function go(id: SectionId, locked: boolean) {
+		if (!locked) {
+			ui.go(id);
+			return;
+		}
+		confirming = {
+			title: 'Firmware update is beta',
+			body: [
+				'Firmware update is still being tested and may not work correctly.',
+				'A bad image or interrupted recovery path can leave you needing UF2 DFU to recover.',
+				'Enable beta mode before using this feature.',
+			],
+			confirmLabel: 'Enable beta',
+			onConfirm: () => {
+				ui.beta = true;
+				ui.go(id);
+			},
+		};
+	}
 </script>
 
 <nav
@@ -15,7 +41,7 @@
 		{@const SectionIcon = s.icon}
 		<button
 			type="button"
-			onclick={() => ui.go(s.id)}
+			onclick={() => go(s.id, !!locked)}
 			aria-current={ui.section === s.id ? 'page' : undefined}
 			title={ui.railCollapsed ? s.label : undefined}
 			class="rounded-base flex items-center gap-2.5 px-2.5 py-2 text-left text-sm transition-colors
@@ -47,3 +73,5 @@
 		{/if}
 	</button>
 </nav>
+
+<ConfirmDialog spec={confirming} onCancel={() => (confirming = null)} />
