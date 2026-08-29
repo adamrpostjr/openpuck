@@ -10,7 +10,8 @@
 		"check": "svelte-check --tsconfig ./tsconfig.json",
 		"test": "vitest run",
 		"format": "prettier --write .",
-		"format:check": "prettier --check ."
+		"format:check": "prettier --check .",
+		"prebuild": "node tools/clean-docs.mjs"
 	},
 	"devDependencies": {
 		"@sveltejs/vite-plugin-svelte": "^7.3.0",

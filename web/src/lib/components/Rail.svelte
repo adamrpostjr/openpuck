@@ -38,6 +38,7 @@
 	aria-label="Sections"
 >
 	{#each SECTIONS.filter((s) => !device.isDongle || DONGLE_SECTIONS.includes(s.id)) as s (s.id)}
+		{@const dimmed = !device.connected && s.id !== 'sniffer'}
 		<!-- Flashing a dongle is a primary use, so its Firmware section is not
 		     beta-gated the way a puck's is. -->
 		{@const locked = s.beta && !ui.beta && !device.isDongle}
@@ -48,6 +49,7 @@
 			aria-current={ui.section === s.id ? 'page' : undefined}
 			title={ui.railCollapsed ? s.label : undefined}
 			class="rounded-base flex items-center gap-2.5 px-2.5 py-2 text-left text-sm transition-colors
+				{dimmed ? 'opacity-50' : ''}
 				{ui.section === s.id
 				? 'bg-primary-500/15 text-primary-700-300 ring-primary-500/40 ring-1'
 				: 'text-app-muted hover:bg-app-card hover:text-app-strong'}"

@@ -15,10 +15,10 @@ export default defineConfig({
 		outDir: '../docs',
 		emptyOutDir: false,
 		rollupOptions: {
-			input: {
-				index: resolve(import.meta.dirname, 'index.html'),
-				sniffer: resolve(import.meta.dirname, 'sniffer.html'),
-			},
+			// sniffer.html is a redirect stub, not an app entry: the sniffer is a
+			// section of the panel now. It is copied verbatim so the old URL,
+			// linked from puck_sniffer/README.md, keeps working.
+			input: { index: resolve(import.meta.dirname, 'index.html') },
 		},
 	},
 	// Relative asset URLs so the same build works at /openpuck/ on Pages and at
