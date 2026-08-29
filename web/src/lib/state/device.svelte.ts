@@ -17,6 +17,7 @@ import { fwup } from '$lib/state/fwup.svelte';
 import { decodeBindings, encodeBinding, filterSavable, LZ_MAX, LZ_OP, type LizardBinding } from '$lib/protocol/lizard';
 import { logs } from '$lib/state/log.svelte';
 import { trail } from '$lib/state/trail.svelte';
+import { diag } from '$lib/state/diag.svelte';
 
 export type ConnState = 'disconnected' | 'connecting' | 'connected' | 'lost';
 
@@ -50,6 +51,13 @@ class DeviceState {
 	private hbLostEpisode = false;
 	private stallEpisode = false;
 	private stallPeak = 0;
+	/**
+	 * A reset queued at disconnect. Its reason, PC and stack come from the first
+	 * blob after reconnect, so the row is only complete once the puck is back.
+	 */
+	private pendingHang: { t: number; uptimeSecs: number | null } | null = null;
+	/** Auto-load the flight trail once per connection, after a fault-class boot. */
+	private flightAutoLoaded = false;
 
 	/**
 	 * Paths that legitimately take over the endpoint and must suspend the blob
@@ -119,6 +127,14 @@ class DeviceState {
 	}
 
 	init() {
+		diag.bind({
+			get connected() {
+				return device.connected;
+			},
+			busy: this.busy,
+			sendRaw: (b) => this.sendRaw(b),
+			readRaw: (n) => this.transport.readRaw(n),
+		});
 		this.transport.listen();
 		void this.transport.autoConnect();
 		setInterval(() => this.checkHeartbeat(), 1000);
@@ -176,6 +192,37 @@ class DeviceState {
 		if (!this.lizardLoaded && next.caps.lizard) {
 			this.lizardLoaded = true;
 			void this.loadLizard();
+		}
+
+		const hx = (v: number) => '0x' + v.toString(16).padStart(8, '0');
+		const r = next.reset;
+
+		// Complete the row queued at disconnect, now that this boot's reason,
+		// stuck stage and captured PC have arrived.
+		if (this.pendingHang && r) {
+			diag.addHang({
+				time: new Date(this.pendingHang.t).toLocaleTimeString(),
+				uptime: this.pendingHang.uptimeSecs,
+				reason: r.name,
+				stage: r.hangStageName ?? '',
+				pc: r.hangPC ? hx(r.hangPC) : '',
+				lr: r.hangLR ? hx(r.hangLR) : '',
+				usbd: next.loop.usbdStackWords,
+			});
+			trail.add(
+				`reconnected — last reset: ${r.name}` +
+					(r.hangStageName ? ` @ ${r.hangStageName}` : '') +
+					(r.hangPC ? ` PC=${hx(r.hangPC)}` : ''),
+			);
+			this.pendingHang = null;
+		}
+
+		// The flight trail is the post-mortem of a real crash, so pull it once
+		// per connection when the last boot was one. Deferred out of this call so
+		// it never nests a transferIn inside the poll.
+		if (r?.isFault && !this.flightAutoLoaded) {
+			this.flightAutoLoaded = true;
+			setTimeout(() => void diag.loadFlight(), 0);
 		}
 	}
 
@@ -477,6 +524,15 @@ class DeviceState {
 
 	/** Renders the shell against a recorded blob, for layout work without hardware. */
 	loadFixture() {
+		// Fixture mode skips init(), so diagnostics still needs its port.
+		diag.bind({
+			get connected() {
+				return device.connected;
+			},
+			busy: this.busy,
+			sendRaw: (b) => this.sendRaw(b),
+			readRaw: (n) => this.transport.readRaw(n),
+		});
 		this.demo = true;
 		this.applyBlob(buildBlob());
 		this.conn = 'connected';

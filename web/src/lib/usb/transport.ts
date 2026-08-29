@@ -189,6 +189,10 @@ export class Transport {
 	}
 
 	private handleGone() {
+		// Only a real disconnect counts. Without this, anything that re-entered
+		// this path with no device attached (a hot reload in dev, a doubled
+		// event) would queue a phantom reset into the hang log.
+		if (!this.dev) return;
 		this.dev = null;
 		this.events.onGone();
 		// The puck re-enumerates after a reboot. The "connect" event usually
@@ -258,6 +262,18 @@ export class Transport {
 
 	readBlob() {
 		return this.readFrame(MARK_STATUS, 12);
+	}
+
+	/**
+	 * One raw read, for the streams that accumulate their own frames across
+	 * many transfers (capture ring, flight recorder) rather than expecting one
+	 * complete frame per read.
+	 */
+	async readRaw(len: number): Promise<Uint8Array | null> {
+		if (!this.dev) return null;
+		const r = await this.dev.transferIn(this.epIn, len);
+		if (r.status !== 'ok' || !r.data) return null;
+		return new Uint8Array(r.data.buffer);
 	}
 
 	// ---- firmware update ----

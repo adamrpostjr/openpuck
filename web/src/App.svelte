@@ -3,6 +3,8 @@
 	import Rail from '$lib/components/Rail.svelte';
 	import MonitorSidebar from '$lib/components/MonitorSidebar.svelte';
 	import LogPanel from '$lib/panels/LogPanel.svelte';
+	import CapturePanel from '$lib/panels/CapturePanel.svelte';
+	import TrailPanel from '$lib/panels/TrailPanel.svelte';
 	import UpdateModal from '$lib/components/UpdateModal.svelte';
 	import Overview from '$lib/sections/Overview.svelte';
 	import Modes from '$lib/sections/Modes.svelte';
@@ -81,5 +83,7 @@
 	{/if}
 
 	<LogPanel />
+	<CapturePanel />
+	<TrailPanel />
 	<UpdateModal />
 </div>
