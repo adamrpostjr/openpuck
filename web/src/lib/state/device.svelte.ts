@@ -1,7 +1,20 @@
 import { parseBlob, STAGE_NAMES, type DeviceStatus } from '$lib/protocol/blob';
 import { buildBlob, FIXTURE_LIZARD } from '$lib/protocol/fixtures';
-import { Transport, MARK_PAIRED } from '$lib/usb/transport';
-import { decodeBindings, encodeBinding, filterSavable, LZ_OP, type LizardBinding } from '$lib/protocol/lizard';
+import { Transport, MARK_BONDS, MARK_PAIRED } from '$lib/usb/transport';
+import {
+	BK_OP,
+	BOND_FRAME_MIN,
+	backupFilename,
+	bondRecord,
+	buildBackup,
+	MODE_UNCHANGED,
+	parseBackup,
+	restoreSteps,
+	type Backup,
+} from '$lib/protocol/backup';
+import { FIELD, padStickField, typeField, TYPE_OFF } from '$lib/protocol/fields';
+import { fwup } from '$lib/state/fwup.svelte';
+import { decodeBindings, encodeBinding, filterSavable, LZ_MAX, LZ_OP, type LizardBinding } from '$lib/protocol/lizard';
 import { logs } from '$lib/state/log.svelte';
 import { trail } from '$lib/state/trail.svelte';
 
@@ -289,6 +302,170 @@ class DeviceState {
 			if (b) this.lizard = b;
 			logs.ok('lizard map reset to defaults');
 		});
+	}
+
+	// ---- backup / clone ----
+
+	/** Let an in-flight poll settle before driving the shared endpoints directly. */
+	private async waitIdle() {
+		for (let i = 0; i < 60 && this.inflight; i++) await new Promise((r) => setTimeout(r, 5));
+	}
+
+	private async readBonds(): Promise<Uint8Array | null> {
+		await this.transport.send([BK_OP.dumpBonds]);
+		for (let t = 0; t < 8; t++) {
+			const bp = await this.transport.readFrame(MARK_BONDS, BOND_FRAME_MIN);
+			if (bp) return bp;
+		}
+		return null;
+	}
+
+	async exportBackup() {
+		if (!this.transport.connected) {
+			logs.warn('not connected');
+			return;
+		}
+		this.busy.backup = true;
+		await this.waitIdle();
+		try {
+			// Take a fresh config snapshot rather than trusting the last poll.
+			await this.transport.send([0x01]);
+			const cfg = await this.transport.readBlob();
+			if (cfg) this.lastBlob = cfg;
+			if (!this.lastBlob) {
+				logs.error('export: no config snapshot yet — wait a second and retry');
+				return;
+			}
+			const bp = await this.readBonds();
+			if (!bp) {
+				logs.error('export: no bond data (firmware too old for 0x09 export — reflash)');
+				return;
+			}
+			// Only snapshot the lizard map once its lazy load has finished; an
+			// empty one would clear the target's bindings on restore.
+			const map = this.lizardLoaded && this.lizardCapable && !this.busy.lizard ? this.lizard : null;
+			const backup = buildBackup(this.lastBlob, bp, map ? ($state.snapshot(map) as typeof map) : null);
+
+			const a = document.createElement('a');
+			a.href = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' }));
+			a.download = backupFilename();
+			a.click();
+			URL.revokeObjectURL(a.href);
+			logs.ok(`exported backup — ${backup.bonds.filter((b) => b.used).length} bonded slot(s) + all settings`);
+		} finally {
+			this.busy.backup = false;
+		}
+	}
+
+	async importBackup(backup: Backup) {
+		if (!this.transport.connected) {
+			logs.warn('not connected');
+			return;
+		}
+		this.busy.backup = true;
+		await this.waitIdle();
+		fwup.open('Restore backup');
+		const c = backup.config;
+		const total = restoreSteps(c, this.lizardCapable);
+		let step = 0;
+		let stage = '';
+		const tick = () => fwup.stage(stage, Math.min(99, Math.floor((step * 100) / total)));
+
+		try {
+			// The #1 import failure is being connected to a puck still on old
+			// firmware: it silently ignores the bond-import command below. Probe
+			// for the 0xA7 answer first and fail loudly instead.
+			fwup.stage('Checking puck firmware', null);
+			if (!(await this.readBonds())) {
+				logs.error('import ABORTED — the connected puck does not support import (old firmware).');
+				fwup.finish(
+					false,
+					"This puck's firmware is too old to import a backup. Flash it with the latest OpenPuck build " +
+						'(the same one that produced the export), reconnect, then import again.',
+					'Import failed',
+				);
+				return;
+			}
+
+			// Every step is write-then-read, the same shape as the proven 0x02
+			// sliders: the firmware acks with a status blob, and reading it keeps
+			// the OUT pipe flowing and paces the writes.
+			const w = async (bytes: number[]) => {
+				await this.transport.send(bytes);
+				await this.transport.readBlob();
+				step++;
+				tick();
+			};
+			const sf = (f: number, v: number) => w([0x02, f, (v | 0) & 0xff]);
+
+			stage = 'Restoring settings';
+			tick();
+			await sf(FIELD.mouseDiv, c.mDiv);
+			await sf(FIELD.mouseFriction, c.mFric);
+			await sf(FIELD.persistMode, c.persistMode ? 1 : 0);
+			for (let i = 0; i < 3; i++) await sf(FIELD.chordFace[i], c.chord[i]);
+			// Absent in backups taken before these settings existed -- skip them
+			// rather than replaying a default over the target's real value.
+			if (Array.isArray(c.chordD)) for (let i = 0; i < 4; i++) await sf(FIELD.chordDpad[i], c.chordD[i]);
+			if (c.swGyroLegacy !== undefined) await sf(FIELD.swGyroMap, c.swGyroLegacy ? 1 : 0);
+
+			const typeN = Array.isArray(c.types) ? Math.min(c.types.length, 4) : 0;
+			for (let et = 0; et < typeN; et++) {
+				const t = c.types[et];
+				for (let k = 0; k < 4; k++) await sf(typeField(et, TYPE_OFF.back + k), t.back[k]);
+				await sf(typeField(et, TYPE_OFF.qam), t.qam);
+				await sf(typeField(et, TYPE_OFF.abSwap), t.abSwap ? 1 : 0);
+				await sf(typeField(et, TYPE_OFF.padHaptics), t.pad ? 1 : 0);
+				await sf(typeField(et, TYPE_OFF.led), t.led);
+				await sf(typeField(et, TYPE_OFF.rumble), t.rumble !== undefined ? t.rumble : 1);
+				if (Array.isArray(t.padStick)) {
+					await sf(padStickField(et, 0), t.padStick[0]);
+					await sf(padStickField(et, 1), t.padStick[1]);
+				}
+			}
+			logs.info(`settings replayed${typeN ? '' : ' (no per-type config in this backup)'}`);
+
+			if (Array.isArray(c.lizardMap) && this.lizardCapable) {
+				stage = 'Restoring button map';
+				tick();
+				const map = c.lizardMap.slice(0, LZ_MAX);
+				await this.transport.send([LZ_OP.beginEdit, map.length & 0xff]);
+				for (let i = 0; i < map.length; i++) {
+					await this.transport.send(encodeBinding(i, map[i]));
+					step++;
+					tick();
+				}
+				await this.transport.send([LZ_OP.commit]);
+				// Drain the 0xAA echo so the pipe is clean for the bond writes.
+				await this.transport.readLizardFrame();
+				logs.ok(`lizard map restored — ${map.length} bindings`);
+			}
+
+			stage = 'Restoring controller pairings';
+			tick();
+			let n = 0;
+			for (let s = 0; s < 4; s++) {
+				const { used, rec } = bondRecord(backup.bonds.find((x) => x.slot === s));
+				if (used) n++;
+				await w([BK_OP.writeBond, s, used, ...rec]);
+			}
+			logs.info(`wrote ${n} bond slot(s) — committing + rebooting`);
+
+			// Commit persists the bonds, applies the mode and reboots, so there
+			// is no ack to wait for.
+			stage = 'Committing + rebooting';
+			step++;
+			tick();
+			await this.transport.send([BK_OP.commitReboot, (c.mode !== undefined ? c.mode : MODE_UNCHANGED) & 0xff]);
+			logs.ok('import sent — puck is cloning and rebooting. Reconnect after it returns.');
+			fwup.finish(true, 'Backup restored — the puck is cloning and rebooting. Reconnect after it returns.');
+		} catch (e) {
+			const msg = (e as Error).message;
+			logs.error(`import FAILED — ${msg}`);
+			fwup.finish(false, `${msg} — the import stopped partway; reconnect and retry.`, 'Import failed');
+		} finally {
+			this.busy.backup = false;
+		}
 	}
 
 	/**
