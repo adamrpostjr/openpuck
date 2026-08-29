@@ -1,13 +1,7 @@
 import { parseBlob, STAGE_NAMES, type DeviceStatus } from '$lib/protocol/blob';
 import { buildBlob, FIXTURE_LIZARD } from '$lib/protocol/fixtures';
 import { Transport, MARK_PAIRED } from '$lib/usb/transport';
-import {
-	decodeBindings,
-	encodeBinding,
-	filterSavable,
-	LZ_OP,
-	type LizardBinding,
-} from '$lib/protocol/lizard';
+import { decodeBindings, encodeBinding, filterSavable, LZ_OP, type LizardBinding } from '$lib/protocol/lizard';
 import { logs } from '$lib/state/log.svelte';
 import { trail } from '$lib/state/trail.svelte';
 
@@ -48,36 +42,44 @@ class DeviceState {
 	 * Paths that legitimately take over the endpoint and must suspend the blob
 	 * poll: a nested transferIn would steal the other path's reply.
 	 */
-	busy = $state({ capture: false, backup: false, flight: false, lizard: false });
+	busy = $state({
+		capture: false,
+		backup: false,
+		flight: false,
+		lizard: false,
+	});
 
 	constructor() {
-		this.transport = new Transport({
-			onOpen: ({ isDongle, serial }) => {
-				this.isDongle = isDongle;
-				this.serial = serial;
-				this.conn = 'connected';
-				this.hardWedge = null;
-				this.lastBlobTs = 0;
-				this.hbLostEpisode = false;
-				this.lizardLoaded = false;
-				void this.startPolling();
+		this.transport = new Transport(
+			{
+				onOpen: ({ isDongle, serial }) => {
+					this.isDongle = isDongle;
+					this.serial = serial;
+					this.conn = 'connected';
+					this.hardWedge = null;
+					this.lastBlobTs = 0;
+					this.hbLostEpisode = false;
+					this.lizardLoaded = false;
+					void this.startPolling();
+				},
+				onGone: () => {
+					this.polling = false;
+					this.conn = 'lost';
+					this.status = null;
+					this.lastBlobTs = 0;
+					this.hbLostEpisode = false;
+					this.hardWedge = null;
+					logs.warn('device disconnected (mode-switch / watchdog reboot) — auto-reconnecting when it returns');
+					trail.add('device disconnected — reset or replug; reason logged on reconnect');
+				},
+				onWedge: ({ stage, stallMs }) => {
+					const name = STAGE_NAMES[stage] ?? `stage ${stage}`;
+					trail.add(`WEDGED @ ${name} (${stallMs}ms — live 0xA9 report; watchdog reset imminent)`);
+					logs.error(`LOOP WEDGED @ ${name} (stuck ${stallMs}ms) — watchdog reset imminent`);
+				},
 			},
-			onGone: () => {
-				this.polling = false;
-				this.conn = 'lost';
-				this.status = null;
-				this.lastBlobTs = 0;
-				this.hbLostEpisode = false;
-				this.hardWedge = null;
-				logs.warn('device disconnected (mode-switch / watchdog reboot) — auto-reconnecting when it returns');
-				trail.add('device disconnected — reset or replug; reason logged on reconnect');
-			},
-			onWedge: ({ stage, stallMs }) => {
-				const name = STAGE_NAMES[stage] ?? `stage ${stage}`;
-				trail.add(`WEDGED @ ${name} (${stallMs}ms — live 0xA9 report; watchdog reset imminent)`);
-				logs.error(`LOOP WEDGED @ ${name} (stuck ${stallMs}ms) — watchdog reset imminent`);
-			},
-		});
+			logs,
+		);
 	}
 
 	get connected() {
@@ -289,8 +291,16 @@ class DeviceState {
 		});
 	}
 
+	/**
+	 * True when the readings on screen came from a recorded blob rather than a
+	 * puck. The UI must say so: everything else about this state is identical to
+	 * a live connection, so without a marker it reads as real hardware.
+	 */
+	demo = $state(false);
+
 	/** Renders the shell against a recorded blob, for layout work without hardware. */
 	loadFixture() {
+		this.demo = true;
 		this.applyBlob(buildBlob());
 		this.conn = 'connected';
 		this.lizardLoaded = true; // no device to dump from

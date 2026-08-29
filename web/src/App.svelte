@@ -54,8 +54,8 @@
 			<div class="max-w-lg text-center">
 				<h1 class="mb-2 text-lg font-semibold">Connect your puck</h1>
 				<p class="text-app-muted mb-4 text-sm">
-					First connect uses the Chrome/Edge device picker; reconnects are automatic. If the picker is empty, quit
-					any app holding the device or replug.
+					First connect uses the Chrome/Edge device picker; reconnects are automatic. If the picker is empty, quit any
+					app holding the device or replug.
 				</p>
 				<button type="button" class="btn preset-filled-primary-500" onclick={() => device.connect()}>
 					{device.conn === 'connecting' ? 'Connecting…' : 'Connect'}

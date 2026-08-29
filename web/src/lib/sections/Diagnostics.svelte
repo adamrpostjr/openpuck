@@ -20,8 +20,8 @@
 	<Panel title="Global telemetry">
 		{#snippet info()}
 			<InfoPopover title="Global telemetry">
-				Sums over all controllers; the sidebar shows the selected controller's own rates. Polls/s ≈ 250 expected;
-				it's capped by the loop period (≈4000 µs needed).
+				Sums over all controllers; the sidebar shows the selected controller's own rates. Polls/s ≈ 250 expected; it's
+				capped by the loop period (≈4000 µs needed).
 			</InfoPopover>
 		{/snippet}
 		<div class="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
@@ -55,7 +55,11 @@
 				label="Poll period act/want"
 				value={status?.link.up ? `${status.loop.pollUs} / ${status.loop.pollIntendedUs} µs` : null}
 			/>
-			<Stat label="Ring faults" value={status?.rates.ringFault || null} tone={status?.rates.ringFault ? 'down' : 'none'} />
+			<Stat
+				label="Ring faults"
+				value={status?.rates.ringFault || null}
+				tone={status?.rates.ringFault ? 'down' : 'none'}
+			/>
 		</div>
 	</Panel>
 
@@ -83,9 +87,9 @@
 	<Panel title="IMU (raw)">
 		{#snippet info()}
 			<InfoPopover title="IMU (raw)">
-				Raw SC2 accel (before scaling). This controller is a ±2 g sensor (~16384 = 1 g); the Switch report divides
-				it by 4 to present the genuine ±8 g (4096 = 1 g) scale so the console's gravity-correction engages and the
-				gyro stops drifting.
+				Raw SC2 accel (before scaling). This controller is a ±2 g sensor (~16384 = 1 g); the Switch report divides it by
+				4 to present the genuine ±8 g (4096 = 1 g) scale so the console's gravity-correction engages and the gyro stops
+				drifting.
 			</InfoPopover>
 		{/snippet}
 		{#if status?.imu}

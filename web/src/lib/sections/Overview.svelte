@@ -11,8 +11,8 @@
 	<Panel title="Version">
 		{#snippet info()}
 			<InfoPopover title="Version">
-				This section reflects the connected puck. Reconnect after flashing or changing modes to verify what is
-				currently running.
+				This section reflects the connected puck. Reconnect after flashing or changing modes to verify what is currently
+				running.
 			</InfoPopover>
 		{/snippet}
 		<div class="grid grid-cols-2 gap-2">
@@ -34,9 +34,9 @@
 	<Panel title="Backup &amp; clone">
 		{#snippet info()}
 			<InfoPopover title="Backup &amp; clone">
-				Save this puck's controller pairings <em>and</em> every setting to a file, then restore them onto another puck.
-				The other puck becomes a clone — any controller paired to this one connects to it with no re-pairing. Import
-				overwrites all pairings and settings on the connected puck, then reboots it.
+				Save this puck's controller pairings <em>and</em> every setting to a file, then restore them onto another puck. The
+				other puck becomes a clone — any controller paired to this one connects to it with no re-pairing. Import overwrites
+				all pairings and settings on the connected puck, then reboots it.
 			</InfoPopover>
 		{/snippet}
 		<div class="flex flex-wrap gap-2">

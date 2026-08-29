@@ -36,9 +36,9 @@
 <Panel title="Button mapping">
 	{#snippet info()}
 		<InfoPopover title="Button mapping">
-			Separate mappings per emulated controller type — each only offers targets that exist on that controller. The
-			type matching the current mode is marked. Steam &amp; Lizard are native puck modes (Steam does its own
-			remapping) and aren't configured here.
+			Separate mappings per emulated controller type — each only offers targets that exist on that controller. The type
+			matching the current mode is marked. Steam &amp; Lizard are native puck modes (Steam does its own remapping) and
+			aren't configured here.
 		</InfoPopover>
 	{/snippet}
 

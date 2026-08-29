@@ -38,12 +38,18 @@
 <header class="border-app-line bg-app-chrome flex shrink-0 items-center gap-3 border-b px-4 py-2">
 	<span class="font-bold tracking-tight">OpenPuck</span>
 
-	<span
-		class="rounded-full px-2 py-0.5 text-xs font-semibold
-		{device.connected ? 'bg-success-100-900 text-success-700-300' : 'bg-error-100-900 text-error-700-300'}"
-	>
-		{CONN_LABEL[device.conn]}
-	</span>
+	{#if device.demo}
+		<span class="bg-warning-100-900 text-warning-700-300 rounded-full px-2 py-0.5 text-xs font-semibold">
+			demo data — no device
+		</span>
+	{:else}
+		<span
+			class="rounded-full px-2 py-0.5 text-xs font-semibold
+			{device.connected ? 'bg-success-100-900 text-success-700-300' : 'bg-error-100-900 text-error-700-300'}"
+		>
+			{CONN_LABEL[device.conn]}
+		</span>
+	{/if}
 
 	{#if status}
 		<span class="text-app-strong rounded-base bg-app-well border-app-line border px-2 py-0.5 text-xs">

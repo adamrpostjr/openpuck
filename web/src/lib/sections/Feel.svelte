@@ -29,13 +29,15 @@
 	<Panel title="Trackpad mouse" class={mouseActive ? '' : 'opacity-60'}>
 		{#snippet info()}
 			<InfoPopover title="Trackpad mouse (lizard + Xbox)">
-				Right-pad cursor in Steam-mode lizard (Steam closed) and in Xbox mode. Sensitivity is a divisor — lower =
-				faster pointer. Glide = how long the cursor coasts after a flick.
+				Right-pad cursor in Steam-mode lizard (Steam closed) and in Xbox mode. Sensitivity is a divisor — lower = faster
+				pointer. Glide = how long the cursor coasts after a flick.
 			</InfoPopover>
 		{/snippet}
 
 		{#if !mouseActive}
-			<p class="text-app-muted mb-3 text-xs">Inactive in {status?.modeName ?? 'this mode'} — applies to Xbox and Lizard.</p>
+			<p class="text-app-muted mb-3 text-xs">
+				Inactive in {status?.modeName ?? 'this mode'} — applies to Xbox and Lizard.
+			</p>
 		{/if}
 
 		<label class="mb-3 block">
@@ -77,8 +79,8 @@
 		{#snippet info()}
 			<InfoPopover title="Gyro mapping">
 				Corrected (default) trims the gyro so Switch Pro mode matches a genuine Pro Controller and Steam mode (roll
-				×0.8, pitch/yaw ×0.9). Legacy sends the raw axes untrimmed — the pre-fix behavior, if you preferred the
-				faster feel or tuned your in-game sensitivity around it.
+				×0.8, pitch/yaw ×0.9). Legacy sends the raw axes untrimmed — the pre-fix behavior, if you preferred the faster
+				feel or tuned your in-game sensitivity around it.
 			</InfoPopover>
 		{/snippet}
 
@@ -101,13 +103,14 @@
 	<Panel title="Rumble">
 		{#snippet info()}
 			<InfoPopover title="Rumble shaping">
-				Applies to the translated modes (Xbox / Switch / PlayStation), where the puck decodes the host's rumble
-				packet itself. Steam mode relays Steam's own haptics untouched, so these do nothing there. Strength is a
-				percentage of the amplitude the game asked for; 200% is the shipped default, so leave it there for stock
-				feel. Style reshapes the two motors before that scale: <strong>mono</strong> drives both at the stronger
-				value, <strong>heavy</strong> and <strong>light</strong> mute one motor each,
-				<strong>punchy</strong> softens weak effects while leaving strong ones alone, and <strong>soft</strong> lifts
-				weak ones so subtle rumble is felt.
+				Applies to the translated modes (Xbox / Switch / PlayStation), where the puck decodes the host's rumble packet
+				itself. Steam mode relays Steam's own haptics untouched, so these do nothing there. Strength is a percentage of
+				the amplitude the game asked for; 200% is the shipped default, so leave it there for stock feel. Style reshapes
+				the two motors before that scale: <strong>mono</strong> drives both at the stronger value,
+				<strong>heavy</strong>
+				and <strong>light</strong> mute one motor each,
+				<strong>punchy</strong> softens weak effects while leaving strong ones alone, and <strong>soft</strong> lifts weak
+				ones so subtle rumble is felt.
 			</InfoPopover>
 		{/snippet}
 

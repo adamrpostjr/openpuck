@@ -94,9 +94,9 @@
 			</h2>
 			<p class="text-app-muted mt-1 text-xs">
 				This puck is running {status?.build.id || 'an unknown build'} (status v{status?.protocol ?? '?'}), which
-				predates panel updates (needs v15+), so updating from this page is disabled. One manual flash gets you
-				back: choose <strong>UF2 DFU</strong> in the Device menu, then drag a panel-update-capable .uf2 onto the
-				UF2BOOT drive it mounts. Every update after that happens right here.
+				predates panel updates (needs v15+), so updating from this page is disabled. One manual flash gets you back:
+				choose <strong>UF2 DFU</strong> in the Device menu, then drag a panel-update-capable .uf2 onto the UF2BOOT drive it
+				mounts. Every update after that happens right here.
 			</p>
 		</div>
 	{/if}
@@ -112,10 +112,10 @@
 	<Panel title="Update from a local file" disabled={gated}>
 		{#snippet info()}
 			<InfoPopover title="Local file update">
-				The image is streamed over WebUSB into spare flash, verified <em>on the puck</em>, and applied on an
-				automatic reboot. Nothing is armed until it verifies — a failed or interrupted transfer leaves the running
-				firmware untouched, and even a power cut during the apply only leaves the puck in its UF2 bootloader for
-				drag-and-drop recovery.
+				The image is streamed over WebUSB into spare flash, verified <em>on the puck</em>, and applied on an automatic
+				reboot. Nothing is armed until it verifies — a failed or interrupted transfer leaves the running firmware
+				untouched, and even a power cut during the apply only leaves the puck in its UF2 bootloader for drag-and-drop
+				recovery.
 			</InfoPopover>
 		{/snippet}
 
@@ -157,8 +157,7 @@
 				class="btn preset-filled-primary-500 btn-sm"
 				disabled={!selected || !device.connected}
 				onclick={() =>
-					selected &&
-					ask('Flashing firmware', `Flash ${selected.name} to the puck?`, async () => selected!.image)}
+					selected && ask('Flashing firmware', `Flash ${selected.name} to the puck?`, async () => selected!.image)}
 			>
 				Flash firmware
 			</button>
@@ -178,9 +177,8 @@
 		{#snippet info()}
 			<InfoPopover title="Releases">
 				Official builds from github.com/{REL_REPO}/releases. <strong>Factory reset</strong> flashes the
-				<code>-factory-reset</code> build of that version: on its first boot it wipes ALL settings and the
-				controller pairing (you must re-pair), then behaves like the standard build. Use it to recover from a bad
-				config or stale bond.
+				<code>-factory-reset</code> build of that version: on its first boot it wipes ALL settings and the controller pairing
+				(you must re-pair), then behaves like the standard build. Use it to recover from a bad config or stale bond.
 			</InfoPopover>
 		{/snippet}
 

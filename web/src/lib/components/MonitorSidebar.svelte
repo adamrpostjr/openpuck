@@ -58,7 +58,8 @@
 				<span class="text-app-muted">Loop</span>
 				{#if status.loop.stalled}
 					<span class="bg-error-100-900 text-error-700-300 rounded-full px-2 py-0.5 font-semibold">
-						STALLED @ {status.loop.stage} {status.loop.stallMs}ms
+						STALLED @ {status.loop.stage}
+						{status.loop.stallMs}ms
 					</span>
 				{:else}
 					<span class="bg-success-100-900 text-success-700-300 rounded-full px-2 py-0.5 font-semibold">running</span>

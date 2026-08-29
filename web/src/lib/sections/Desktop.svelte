@@ -82,9 +82,9 @@
 <Panel title="Lizard / desktop mapping">
 	{#snippet info()}
 		<InfoPopover title="Lizard / desktop mapping">
-			Keyboard, mouse &amp; media bindings for <strong>Lizard (always)</strong> mode — each row maps a controller
-			input to a desktop action. (Steam-mode seamless lizard, when Steam is closed, keeps the built-in default
-			behavior and is not affected by this map.) Edits apply after <strong>Save to device</strong>.
+			Keyboard, mouse &amp; media bindings for <strong>Lizard (always)</strong> mode — each row maps a controller input
+			to a desktop action. (Steam-mode seamless lizard, when Steam is closed, keeps the built-in default behavior and is
+			not affected by this map.) Edits apply after <strong>Save to device</strong>.
 		</InfoPopover>
 	{/snippet}
 
@@ -338,9 +338,7 @@
 									</div>
 								</div>
 							{:else if b.outType === LZO.SCROLL}
-								<p class="text-app-muted text-xs">
-									Driven by the left trackpad; there is nothing else to configure.
-								</p>
+								<p class="text-app-muted text-xs">Driven by the left trackpad; there is nothing else to configure.</p>
 							{/if}
 						</div>
 					{/if}

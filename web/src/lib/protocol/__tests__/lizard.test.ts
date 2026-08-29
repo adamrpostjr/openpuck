@@ -46,7 +46,7 @@ describe('lizard bindings', () => {
 	});
 
 	it('decodes a full 32-binding map', () => {
-		const many = Array.from({ length: LZ_MAX }, (_, i) => ({ ...ctrlC, trig: 1 << i % 31 }));
+		const many = Array.from({ length: LZ_MAX }, (_, i) => ({ ...ctrlC, trig: 1 << (i % 31) }));
 		expect(decodeBindings(frame(many), LZ_MAX)).toHaveLength(LZ_MAX);
 	});
 
@@ -128,9 +128,7 @@ describe('binding descriptions', () => {
 
 	it('describes an analog source instead of a trigger', () => {
 		expect(describeTrigger(d({ outType: LZO.AXIS, od: [0, 0, 0, 0, 0, 0, 0] }))).toBe('Right trackpad');
-		expect(describeTrigger(d({ outType: LZO.AXIS, od: [2, 1, 0, 0, 0, 0, 0] }))).toBe(
-			'Gyro, while right pad touched',
-		);
+		expect(describeTrigger(d({ outType: LZO.AXIS, od: [2, 1, 0, 0, 0, 0, 0] }))).toBe('Gyro, while right pad touched');
 		expect(describeTrigger(d({ outType: LZO.SCROLL }))).toBe('Left trackpad');
 	});
 

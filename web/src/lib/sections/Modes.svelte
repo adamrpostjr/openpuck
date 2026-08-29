@@ -27,8 +27,8 @@
 	<Panel title="USB mode">
 		{#snippet info()}
 			<InfoPopover title="USB mode">
-				Switching reboots the copycat and re-enumerates USB (~2 s). WebUSB works in every mode, including
-				Steam/Lizard with Steam running (Chrome claims the vendor interface; Steam keeps the HID slots).
+				Switching reboots the copycat and re-enumerates USB (~2 s). WebUSB works in every mode, including Steam/Lizard
+				with Steam running (Chrome claims the vendor interface; Steam keeps the HID slots).
 			</InfoPopover>
 		{/snippet}
 
@@ -78,8 +78,7 @@
 				{status?.persistMode ? 'on' : 'off'}
 			</button>
 			<InfoPopover title="Persist last mode">
-				Off (default): every restart / fresh reconnect boots into Steam mode. On: remembers the last mode you
-				selected.
+				Off (default): every restart / fresh reconnect boots into Steam mode. On: remembers the last mode you selected.
 			</InfoPopover>
 		</div>
 	</Panel>
@@ -87,8 +86,7 @@
 	<Panel title="Back4 chords">
 		{#snippet info()}
 			<InfoPopover title="Back4 chords">
-				Hold all four back paddles (L4+R4+L5+R5) plus a face button or D-pad direction to switch mode without the
-				WebUI.
+				Hold all four back paddles (L4+R4+L5+R5) plus a face button or D-pad direction to switch mode without the WebUI.
 			</InfoPopover>
 		{/snippet}
 

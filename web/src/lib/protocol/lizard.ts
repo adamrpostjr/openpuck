@@ -24,18 +24,36 @@ export const LZ_OUT_LABELS: [number, string][] = [
 
 /** Controller input bits (triton.h TB_* plus virtual stick-deflection bits). Single-bit triggers only. */
 export const LZ_BTNS: [number, string][] = [
-	[0x1, 'A'], [0x2, 'B'], [0x4, 'X'], [0x8, 'Y'],
-	[0x10, 'QAM (• • •)'], [0x40, 'View'], [0x4000, 'Menu'], [0x10000, 'Steam'],
-	[0x20, 'R3 (stick click)'], [0x8000, 'L3 (stick click)'],
-	[0x80, 'R4 (back upper-right)'], [0x100, 'R5 (back lower-right)'],
-	[0x20000, 'L4 (back upper-left)'], [0x40000, 'L5 (back lower-left)'],
-	[0x200, 'RB (bumper)'], [0x80000, 'LB (bumper)'],
-	[0x800000, 'R2 (trigger pull)'], [0x8000000, 'L2 (trigger pull)'],
-	[0x2000, 'D-pad Up'], [0x400, 'D-pad Down'], [0x1000, 'D-pad Left'], [0x800, 'D-pad Right'],
-	[0x400000, 'Right pad click'], [0x4000000, 'Left pad click'],
-	[0x200000, 'Right pad touch'], [0x2000000, 'Left pad touch'],
-	[0x10000000, 'L-stick → right'], [0x20000000, 'L-stick → left'],
-	[0x40000000, 'L-stick → down'], [0x80000000, 'L-stick → up'],
+	[0x1, 'A'],
+	[0x2, 'B'],
+	[0x4, 'X'],
+	[0x8, 'Y'],
+	[0x10, 'QAM (• • •)'],
+	[0x40, 'View'],
+	[0x4000, 'Menu'],
+	[0x10000, 'Steam'],
+	[0x20, 'R3 (stick click)'],
+	[0x8000, 'L3 (stick click)'],
+	[0x80, 'R4 (back upper-right)'],
+	[0x100, 'R5 (back lower-right)'],
+	[0x20000, 'L4 (back upper-left)'],
+	[0x40000, 'L5 (back lower-left)'],
+	[0x200, 'RB (bumper)'],
+	[0x80000, 'LB (bumper)'],
+	[0x800000, 'R2 (trigger pull)'],
+	[0x8000000, 'L2 (trigger pull)'],
+	[0x2000, 'D-pad Up'],
+	[0x400, 'D-pad Down'],
+	[0x1000, 'D-pad Left'],
+	[0x800, 'D-pad Right'],
+	[0x400000, 'Right pad click'],
+	[0x4000000, 'Left pad click'],
+	[0x200000, 'Right pad touch'],
+	[0x2000000, 'Left pad touch'],
+	[0x10000000, 'L-stick → right'],
+	[0x20000000, 'L-stick → left'],
+	[0x40000000, 'L-stick → down'],
+	[0x80000000, 'L-stick → up'],
 ];
 
 /** Keyboard modifier bits, held in od[0] for a KBD output. */
@@ -52,11 +70,24 @@ export const LZ_KEYS: [number, string][] = (() => {
 	'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').forEach((c, i) => keys.push([0x04 + i, c]));
 	'1234567890'.split('').forEach((c, i) => keys.push([0x1e + i, c]));
 	const named: [number, string][] = [
-		[0x28, 'Enter'], [0x29, 'Esc'], [0x2a, 'Backspace'], [0x2b, 'Tab'], [0x2c, 'Space'],
-		[0x4f, 'Arrow Right'], [0x50, 'Arrow Left'], [0x51, 'Arrow Down'], [0x52, 'Arrow Up'],
-		[0x4a, 'Home'], [0x4d, 'End'], [0x4b, 'Page Up'], [0x4e, 'Page Down'],
-		[0x49, 'Insert'], [0x4c, 'Delete'],
-		[0x2d, '- _'], [0x2e, '= +'], [0x46, 'Print Screen'],
+		[0x28, 'Enter'],
+		[0x29, 'Esc'],
+		[0x2a, 'Backspace'],
+		[0x2b, 'Tab'],
+		[0x2c, 'Space'],
+		[0x4f, 'Arrow Right'],
+		[0x50, 'Arrow Left'],
+		[0x51, 'Arrow Down'],
+		[0x52, 'Arrow Up'],
+		[0x4a, 'Home'],
+		[0x4d, 'End'],
+		[0x4b, 'Page Up'],
+		[0x4e, 'Page Down'],
+		[0x49, 'Insert'],
+		[0x4c, 'Delete'],
+		[0x2d, '- _'],
+		[0x2e, '= +'],
+		[0x46, 'Print Screen'],
 	];
 	named.forEach((k) => keys.push(k));
 	for (let i = 0; i < 12; i++) keys.push([0x3a + i, `F${i + 1}`]);
@@ -130,7 +161,7 @@ export function defaultPayload(outType: number): number[] {
 }
 
 export function btnLabel(mask: number): string {
-	const m = LZ_BTNS.find((b) => b[0] === (mask >>> 0));
+	const m = LZ_BTNS.find((b) => b[0] === mask >>> 0);
 	if (m) return m[1];
 	return mask ? `0x${(mask >>> 0).toString(16)}` : '';
 }
@@ -161,13 +192,18 @@ export function encodeBinding(index: number, b: LizardBinding): number[] {
 		index,
 		b.outType,
 		...od.map((x) => x & 0xff),
-		t & 0xff, (t >>> 8) & 0xff, (t >>> 16) & 0xff, (t >>> 24) & 0xff,
-		h & 0xff, (h >>> 8) & 0xff, (h >>> 16) & 0xff, (h >>> 24) & 0xff,
+		t & 0xff,
+		(t >>> 8) & 0xff,
+		(t >>> 16) & 0xff,
+		(t >>> 24) & 0xff,
+		h & 0xff,
+		(h >>> 8) & 0xff,
+		(h >>> 16) & 0xff,
+		(h >>> 24) & 0xff,
 	];
 }
 
-const label = (table: [number, string][], v: number, fallback = '?') =>
-	table.find(([k]) => k === v)?.[1] ?? fallback;
+const label = (table: [number, string][], v: number, fallback = '?') => table.find(([k]) => k === v)?.[1] ?? fallback;
 
 /**
  * What fires the binding, as readable text: "A", "A + hold L4", or the analog

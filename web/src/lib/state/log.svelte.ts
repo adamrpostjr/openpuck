@@ -43,9 +43,7 @@ class LogStore {
 	}
 
 	get text() {
-		return this.entries
-			.map((e) => `${e.at.toLocaleTimeString()}  ${e.message}`)
-			.join('\n');
+		return this.entries.map((e) => `${e.at.toLocaleTimeString()}  ${e.message}`).join('\n');
 	}
 }
 

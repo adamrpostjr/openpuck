@@ -6,7 +6,6 @@
 // says otherwise.
 
 import { parseAck, type FwupAck } from '$lib/protocol/firmware';
-import { logs } from '$lib/state/log.svelte';
 
 /**
  * Every VID an OpenPuck can enumerate under. The picker and auto-reconnect can
@@ -46,6 +45,17 @@ export interface WedgeReport {
 	stallMs: number;
 }
 
+/**
+ * What the transport needs to report progress, supplied by the caller. Keeping
+ * it an interface rather than importing the log store keeps this module below
+ * the state layer, so it stays usable (and testable) without one.
+ */
+export interface TransportLogger {
+	info: (m: string) => void;
+	ok: (m: string) => void;
+	error: (m: string) => void;
+}
+
 export interface TransportEvents {
 	onOpen: (info: { isDongle: boolean; serial: string; vendorId: number; productId: number }) => void;
 	onGone: () => void;
@@ -59,9 +69,11 @@ export class Transport {
 	private epOut = 0;
 	private ifNum = 0;
 	private events: TransportEvents;
+	private log: TransportLogger;
 
-	constructor(events: TransportEvents) {
+	constructor(events: TransportEvents, log: TransportLogger) {
 		this.events = events;
+		this.log = log;
 	}
 
 	get device() {
@@ -89,7 +101,7 @@ export class Transport {
 			const d = await navigator.usb.requestDevice({ filters: USB_FILTERS });
 			return await this.open(d);
 		} catch (e) {
-			logs.error(`connect failed: ${(e as Error).message}`);
+			this.log.error(`connect failed: ${(e as Error).message}`);
 			return false;
 		}
 	}
@@ -135,7 +147,7 @@ export class Transport {
 				}
 			}
 			if (!found) {
-				logs.error(
+				this.log.error(
 					'no WebUSB bulk vendor interface — reflash firmware with WebUSB enabled, or another app may be holding the device',
 				);
 				this.dev = null;
@@ -158,14 +170,19 @@ export class Transport {
 
 			const isDongle = d.productId === DONGLE_PID;
 			const serial = d.serialNumber ?? '?';
-			logs.ok(
+			this.log.ok(
 				`connected — ${isDongle ? 'ReversePuck' : 'puck'} ${serial} ` +
 					`(VID ${d.vendorId.toString(16)} PID ${d.productId.toString(16)} iface ${this.ifNum})`,
 			);
-			this.events.onOpen({ isDongle, serial, vendorId: d.vendorId, productId: d.productId });
+			this.events.onOpen({
+				isDongle,
+				serial,
+				vendorId: d.vendorId,
+				productId: d.productId,
+			});
 			return true;
 		} catch (e) {
-			logs.error(`connect failed: ${(e as Error).message}`);
+			this.log.error(`connect failed: ${(e as Error).message}`);
 			this.dev = null;
 			return false;
 		}
@@ -191,7 +208,7 @@ export class Transport {
 		try {
 			await this.dev.transferOut(this.epOut, new Uint8Array(bytes));
 		} catch (e) {
-			logs.error(`write err: ${(e as Error).message}`);
+			this.log.error(`write err: ${(e as Error).message}`);
 		}
 	}
 
@@ -215,7 +232,10 @@ export class Transport {
 			// Scan every read for it, whichever frame we were actually after.
 			for (let w = 0; w + 4 < d.length; w++) {
 				if (d[w] === MARK_WEDGE && d[w + 1] === 3) {
-					this.events.onWedge({ stage: d[w + 2], stallMs: d[w + 3] | (d[w + 4] << 8) });
+					this.events.onWedge({
+						stage: d[w + 2],
+						stallMs: d[w + 3] | (d[w + 4] << 8),
+					});
 					break;
 				}
 			}
@@ -231,7 +251,7 @@ export class Transport {
 			const p = d.slice(i + 2, i + 2 + len);
 			return p.length >= minLen ? p : null;
 		} catch (e) {
-			if (this.dev) logs.error(`read err: ${(e as Error).message}`);
+			if (this.dev) this.log.error(`read err: ${(e as Error).message}`);
 			return null;
 		}
 	}

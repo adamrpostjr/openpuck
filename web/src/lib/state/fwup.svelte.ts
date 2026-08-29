@@ -2,15 +2,7 @@
 // interactive surface while an update runs: it covers everything else so a
 // stray click cannot change a mode or write a field mid-flash.
 
-import {
-	crc32,
-	errText,
-	FWUP_CHUNK,
-	FWUP_OP,
-	FWUP_STATUS_RESYNC,
-	maxSends,
-	u32le,
-} from '$lib/protocol/firmware';
+import { crc32, errText, FWUP_CHUNK, FWUP_OP, FWUP_STATUS_RESYNC, maxSends, u32le } from '$lib/protocol/firmware';
 import type { Transport } from '$lib/usb/transport';
 import { logs } from '$lib/state/log.svelte';
 

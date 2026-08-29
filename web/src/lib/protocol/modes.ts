@@ -13,19 +13,40 @@ export interface ModeDef {
 
 export const MODES: ModeDef[] = [
 	{ id: 0, name: 'Steam (puck)', summary: 'Emulates the official puck for Steam Input.', tags: ['default'] },
-	{ id: 1, name: 'Xbox 360', summary: 'XInput gamepad; right trackpad drives the mouse.', tags: ['rumble', 'trackpad'] },
+	{
+		id: 1,
+		name: 'Xbox 360',
+		summary: 'XInput gamepad; right trackpad drives the mouse.',
+		tags: ['rumble', 'trackpad'],
+	},
 	{ id: 2, name: 'Switch (HORIPAD)', summary: 'Basic Switch pad, no gyro or haptics.', tags: ['PC only'] },
 	{
 		id: 3,
 		name: 'Lizard (always)',
 		summary: 'Keyboard, mouse and media output, with no host software.',
-		detail: 'Works on UAC prompts, Task Manager and anywhere else a game pad would not. Configure the bindings in Desktop.',
+		detail:
+			'Works on UAC prompts, Task Manager and anywhere else a game pad would not. Configure the bindings in Desktop.',
 		tags: ['desktop'],
 	},
-	{ id: 4, name: 'Switch Pro + gyro', summary: 'Full Pro Controller with gyro and haptics.', tags: ['gyro', 'rumble', 'console'] },
+	{
+		id: 4,
+		name: 'Switch Pro + gyro',
+		summary: 'Full Pro Controller with gyro and haptics.',
+		tags: ['gyro', 'rumble', 'console'],
+	},
 	{ id: 5, name: 'PS5 DualSense', summary: 'DualSense with gyro and trackpad.', tags: ['gyro', 'trackpad', 'PC only'] },
-	{ id: 6, name: 'HID gyro (DS4)', summary: 'DS4-style report with gyro and trackpad.', tags: ['gyro', 'trackpad', 'PC only'] },
-	{ id: 9, name: 'PS3 (DualShock 3)', summary: 'Enumerates on a real PS3, with gyro and haptics.', tags: ['gyro', 'rumble', 'console'] },
+	{
+		id: 6,
+		name: 'HID gyro (DS4)',
+		summary: 'DS4-style report with gyro and trackpad.',
+		tags: ['gyro', 'trackpad', 'PC only'],
+	},
+	{
+		id: 9,
+		name: 'PS3 (DualShock 3)',
+		summary: 'Enumerates on a real PS3, with gyro and haptics.',
+		tags: ['gyro', 'rumble', 'console'],
+	},
 	{
 		id: 10,
 		name: 'Original Xbox',
