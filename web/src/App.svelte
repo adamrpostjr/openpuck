@@ -15,6 +15,7 @@
 	import type { Component } from 'svelte';
 	import { device, supported } from '$lib/state/device.svelte';
 	import { logs } from '$lib/state/log.svelte';
+	import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
 
 	const EAGER = {
 		overview: Overview,
@@ -75,17 +76,46 @@
 			<main class="min-w-0 flex-1 overflow-y-auto p-3 sm:p-4">
 				<div class="mx-auto max-w-[1600px]">
 					{#if device.connected || !NEEDS_PUCK.has(ui.section)}
-						{#if Current}
-							<Current />
-						{:else}
-							{#await LAZY[ui.section]()}
-								<p class="text-app-muted p-6 text-sm">Loading…</p>
-							{:then mod}
-								<mod.default />
-							{:catch err}
-								<p class="text-error-700-300 p-6 text-sm">Could not load this section: {err.message}</p>
-							{/await}
-						{/if}
+						<!--
+							Keyed on the section so moving away from a broken one clears
+							the error. Without a boundary a single render failure blanks
+							the whole panel silently, which is the worst way for a tool
+							you reach for when hardware is already misbehaving to fail.
+						-->
+						{#key ui.section}
+							<svelte:boundary onerror={(e) => logs.error(`section "${ui.section}" failed: ${(e as Error).message}`)}>
+								{#if Current}
+									<Current />
+								{:else}
+									{#await LAZY[ui.section]()}
+										<p class="text-app-muted p-6 text-sm">Loading…</p>
+									{:then mod}
+										<mod.default />
+									{:catch err}
+										<p class="text-error-700-300 p-6 text-sm">Could not load this section: {err.message}</p>
+									{/await}
+								{/if}
+
+								{#snippet failed(error, reset)}
+									<div class="border-error-500 bg-error-500/10 rounded-container border p-4">
+										<h2 class="text-error-700-300 flex items-center gap-2 text-sm font-semibold">
+											<TriangleAlertIcon size={16} /> This section failed to render
+										</h2>
+										<p class="text-app-muted mt-1 text-xs">
+											The rest of the panel still works, and the device connection is unaffected. The error is in the
+											log.
+										</p>
+										<pre
+											class="bg-app-well border-app-line rounded-base mt-2 overflow-auto border p-2 font-mono text-xs">{(
+												error as Error
+											).message}</pre>
+										<button type="button" class="btn preset-tonal-surface btn-sm mt-3" onclick={reset}>
+											Try again
+										</button>
+									</div>
+								{/snippet}
+							</svelte:boundary>
+						{/key}
 					{:else}
 						<div class="flex flex-col items-center justify-center py-24 text-center">
 							<h1 class="mb-2 text-lg font-semibold">Connect your puck</h1>
