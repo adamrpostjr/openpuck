@@ -5,11 +5,13 @@
 
 import { STAGE_NAMES } from './blob';
 
+/** Stream the recorder: [0x10, restart?1:0], pumped until the end frame. */
 export const FLIGHT_OP = 0x10;
 
 /** Frame types inside a 0xA8 payload. */
 export const FR_FRAME = { end: 0, entry: 1, header: 2 } as const;
 
+/** Recorded event names, indexed by the firmware's event id. */
 export const FR_EVT = [
 	'none',
 	'beat',
@@ -61,6 +63,12 @@ export interface FlightEvent {
  */
 export const USBD_STACK_LOW = 16;
 
+/**
+ * Pull the header and events out of an accumulated buffer.
+ *
+ * Reports how much it consumed so a frame split across transfers is retried
+ * rather than dropped -- the stream arrives in FIFO-sized batches.
+ */
 export function decodeFlightFrames(acc: Uint8Array): {
 	header: FlightHeader | null;
 	events: FlightEvent[];
@@ -119,6 +127,7 @@ export function decodeFlightFrames(acc: Uint8Array): {
 
 const pad = (s: string | number, n: number) => String(s).padEnd(n);
 
+/** The event trail as a fixed-column table, matching the console's FR output. */
 export function formatFlight(events: FlightEvent[]): string {
 	const hx = (v: number) => '0x' + v.toString(16).padStart(4, '0');
 	return (
@@ -132,6 +141,7 @@ export function formatFlight(events: FlightEvent[]): string {
 	);
 }
 
+/** One-line summary of what the board looked like at the moment it wedged. */
 export function formatWedgeVitals(h: FlightHeader): string {
 	const low = h.usbdStk > 0 && h.usbdStk < USBD_STACK_LOW ? ' ⚠LOW' : '';
 	return (

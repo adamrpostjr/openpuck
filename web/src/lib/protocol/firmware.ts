@@ -7,8 +7,11 @@
 // apply only leaves the puck in its UF2 bootloader for drag-and-drop recovery.
 
 export const UF2_MAGIC0 = 0x0a324655;
+/** Second UF2 block magic; both must match or the file is not a UF2. */
 export const UF2_MAGIC1 = 0x9e5d5157;
+/** Trailing magic at byte 508 of every 512-byte block. */
 export const UF2_MAGIC_END = 0x0ab16f30;
+/** nRF52840 family id. An image for another chip family would brick the puck, so it is checked. */
 export const UF2_FAMILY = 0xada52840;
 /** Start of the application region; anything else is not an OpenPuck app UF2. */
 export const APP_BASE = 0x26000;
@@ -17,6 +20,7 @@ export const FWUP_MAX_IMG = 0x60000;
 /** Payload bytes per chunk command. */
 export const FWUP_CHUNK = 128;
 
+/** Update opcodes: begin, stream a chunk, verify+commit, reboot to apply. */
 export const FWUP_OP = {
 	begin: 0x20,
 	chunk: 0x21,
@@ -24,8 +28,10 @@ export const FWUP_OP = {
 	reboot: 0x23,
 } as const;
 
+/** Marker of an update ack frame: [0xAB][5][status][nextOff u32 LE]. */
 export const FWUP_ACK_MARK = 0xab;
 
+/** Update status codes, indexed by the ack's status byte. */
 export const FWUP_ERR = [
 	'ok',
 	'command out of sequence',

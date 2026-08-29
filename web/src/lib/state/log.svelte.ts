@@ -47,4 +47,5 @@ class LogStore {
 	}
 }
 
+/** The activity log behind the floating Logs panel. */
 export const logs = new LogStore();

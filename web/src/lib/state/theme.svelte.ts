@@ -38,4 +38,5 @@ class ThemeState {
 	}
 }
 
+/** Light/dark preference, persisted; dark is the default. */
 export const theme = new ThemeState();

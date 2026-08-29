@@ -6,6 +6,7 @@
 import { LZ_MAX, type LizardBinding } from './lizard';
 import { TYPE_DEFS } from './types';
 
+/** Identifies a backup file; anything else is rejected on import. */
 export const BACKUP_MAGIC = 'openpuck-backup';
 
 export interface BackupBond {
@@ -113,6 +114,7 @@ export function buildBackup(p: Uint8Array, bp: Uint8Array, lizardMap: LizardBind
 	return { magic: BACKUP_MAGIC, version: config.lizardMap ? 2 : 1, bonds, config };
 }
 
+/** Validate and parse a backup file, throwing with a reason the UI can show. */
 export function parseBackup(text: string): Backup {
 	let obj: unknown;
 	try {

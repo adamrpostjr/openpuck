@@ -293,7 +293,8 @@ Note on the serial method: puck (Steam/Lizard) mode drops the CDC console by def
 ## 8. Run the WebUSB app locally
 
 The panel lives in `web/` (Vite + Svelte + Skeleton) and **builds into `docs/`**,
-which is what GitHub Pages serves. `docs/index.html`, `docs/sniffer.html` and
+which is what GitHub Pages serves. `web/README.md` is the orientation for anyone
+who has not used Svelte or Skeleton before. `docs/index.html`, `docs/sniffer.html` and
 `docs/assets/` are generated -- edit the sources under `web/src/`, never those.
 
 Requires Node 20+.

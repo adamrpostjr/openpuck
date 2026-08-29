@@ -19,6 +19,7 @@ export const FIELD = {
 
 /** Per-emulated-type config block: 9 fields each, starting at 40. */
 export const TYPE_FIELD0 = 40;
+/** Fields per emulated type, so type et starts at TYPE_FIELD0 + et * TYPE_STRIDE. */
 export const TYPE_STRIDE = 9;
 
 /** Offsets within a type's block. */
@@ -82,6 +83,7 @@ export const RUMBLE_STYLES: [string, number][] = [
 /** Strength presets. All even, since the wire value is percent/2. */
 export const RUMBLE_SCALES = [50, 75, 100, 150, 200, 250, 300, 400, 500];
 
+/** Switch Pro gyro mapping. Corrected trims the axes to match a genuine Pro Controller. */
 export const GYRO_MAPS: [string, number][] = [
 	['Corrected (default)', 0],
 	['Legacy (untrimmed)', 1],

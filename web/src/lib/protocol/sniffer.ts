@@ -6,12 +6,15 @@
 
 export const SNIFFER_VID = 0x28de;
 
+/** Frame magics: 0xC1DE is a fixed-size status, 0xC0DE a variable-length packet. */
 export const MAGIC = { status: [0xc1, 0xde], packet: [0xc0, 0xde] } as const;
 
+/** A status frame is always this long, magic included. */
 export const STATUS_LEN = 22;
 /** Frames run to MAXLEN+2; anything longer is a desync, not a packet. */
 export const MAX_FRAME = 98;
 
+/** Commands the sniffer board accepts on the OUT endpoint. */
 export const SNIFFER_CMD = {
 	reacquire: 0x01,
 	pinChannel: 0x02,
@@ -67,6 +70,7 @@ export function directionOf(op: number): Direction {
 	return '?';
 }
 
+/** Decode a status frame: the locked session, what was advertised, and drop/bond counters. */
 export function parseStatus(a: Uint8Array, i: number): SnifferStatus {
 	const bondInfo = a[i + 21];
 	return {
@@ -163,6 +167,7 @@ export interface FilterSpec {
 
 export const EMPTY_FILTER: FilterSpec = { hideRoutine: false, dir: '', op: '', len: '', hexMatch: '' };
 
+/** Whether a frame survives the current filter row. */
 export function passesFilter(e: SnifferFrame, f: FilterSpec): boolean {
 	// The two frames that make up ~99% of traffic: input replies and bare polls.
 	if (f.hideRoutine) {
@@ -192,6 +197,7 @@ export function parsePinSession(v: string): number[] | null {
 	return nums;
 }
 
+/** Captured frames as plain text, one per line, for the .txt export. */
 export const formatTextExport = (frames: SnifferFrame[]) =>
 	frames
 		.map(

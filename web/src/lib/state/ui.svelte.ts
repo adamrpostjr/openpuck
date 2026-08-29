@@ -29,6 +29,7 @@ export interface SectionDef {
  */
 export const DONGLE_SECTIONS: SectionId[] = ['overview', 'firmware', 'sniffer'];
 
+/** Rail entries, in display order. */
 export const SECTIONS: SectionDef[] = [
 	{ id: 'overview', label: 'Overview', icon: GaugeIcon },
 	{ id: 'modes', label: 'Modes', icon: Gamepad2Icon },
@@ -88,4 +89,5 @@ class UiState {
 	}
 }
 
+/** Which section is showing, plus the ?debug / ?beta visibility tiers. */
 export const ui = new UiState();

@@ -17,6 +17,7 @@ export interface BlobSpec {
 	bonded: number;
 }
 
+/** Values read off a real puck, so the fixture matches something that existed. */
 export const LIVE_V17: BlobSpec = {
 	protocol: 17,
 	mode: 5,

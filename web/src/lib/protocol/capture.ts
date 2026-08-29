@@ -55,6 +55,7 @@ export function formatEntry(e: CaptureEntry, maxMs: number): string {
 	return `${t}${who} cmd=${hex2(e.rid)}  n=${e.nb}:  ${hex}`;
 }
 
+/** The whole capture as text, timestamped relative to the newest entry. */
 export function formatCapture(lines: CaptureEntry[]): string {
 	if (!lines.length) return '';
 	const maxMs = lines[lines.length - 1].ms;

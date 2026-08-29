@@ -38,6 +38,7 @@ function decodeSerial(raw: Uint8Array): string {
 	return s.replace(/[^\x20-\x7e]/g, '').trim();
 }
 
+/** Decode a 0xAC frame: the dongle's link flags and its paired pucks. */
 export function parseDongleStatus(p: Uint8Array): DongleStatus {
 	const flags = p[1];
 	const count = p[2];

@@ -4,6 +4,7 @@
 
 export const LZ_MAX = 32;
 
+/** Output types. Values are the wire encoding and must match lizard_map.h. */
 export const LZO = {
 	NONE: 0,
 	KBD: 1,
@@ -135,6 +136,7 @@ export const LZ_OP = {
 	reset: 0x15,
 } as const;
 
+/** Marker of a lizard-map dump: [0xAA][count][count * 16 bytes]. */
 export const LIZARD_MARK = 0xaa;
 
 /** Analog outputs are driven by a source, not a button, so they have no trigger. */

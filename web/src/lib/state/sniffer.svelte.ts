@@ -243,4 +243,5 @@ class SnifferState {
 	}
 }
 
+/** The RF sniffer session: its own board, its own connection. */
 export const sniffer = new SnifferState();

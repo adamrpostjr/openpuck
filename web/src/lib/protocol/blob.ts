@@ -38,7 +38,9 @@ export const STAGE_NAMES = [
 /** Slowest-stage names. Shorter list than STAGE_NAMES -- the firmware only times these. */
 export const WORST_NAMES = ['webusb', 'ctrl.task', 'serial', 'rfdiag', 'rflink', 'haptic', 'led'] as const;
 
+/** Low-frequency clock source. 2 (xtal) is healthy; anything else is an RC fallback that drifts the RF schedule. */
 export const LF_CLOCK = ['stopped', 'RC', 'xtal', 'synth'] as const;
+/** High-frequency clock source; 2 (xtal) is healthy. */
 export const HF_CLOCK = ['RC', '?', 'xtal', '?'] as const;
 
 /** Reset causes; codes match RR_* in fault_diag.h. */
@@ -60,6 +62,7 @@ export const RESET_FAULT_CODES = new Set([3, 4, 5]);
 /** Firmware defaults for the D-pad chords: PS3, DS4 game, PS5 game, Switch HORIPAD. */
 export const CHORD_DPAD_DEF = [9, 8, 7, 2];
 
+/** Sentinel in the hang-stage byte meaning the last boot was not a hang. */
 export const NO_HANG_STAGE = 0xff;
 
 export interface SlotStats {
@@ -172,8 +175,16 @@ const s16 = (p: Uint8Array, o: number) => {
 	return v > 32767 ? v - 65536 : v;
 };
 
+/** Emulated controller types the firmware carries config for: Xbox, Switch, DS4, DS5. */
 export const TYPE_COUNT = 4;
 
+/**
+ * Decode a status blob into typed state.
+ *
+ * Every read is guarded on both the protocol version and the payload length,
+ * because an older puck simply sends a shorter frame -- reading past its end
+ * would yield zeros that look like real settings.
+ */
 export function parseBlob(p: Uint8Array): DeviceStatus {
 	const protocol = p[0];
 	const mode = p[1];

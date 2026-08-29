@@ -63,6 +63,13 @@ export interface TransportEvents {
 	onWedge: (w: WedgeReport) => void;
 }
 
+/**
+ * The WebUSB connection to a puck.
+ *
+ * Reports through callbacks and a supplied logger rather than touching UI
+ * state, which is what keeps this below the state layer -- and testable
+ * without one.
+ */
 export class Transport {
 	private dev: USBDevice | null = null;
 	private epIn = 0;

@@ -578,5 +578,7 @@ class DeviceState {
 	}
 }
 
+/** The connection, the 600ms status poll, and every write to the puck. */
 export const device = new DeviceState();
+/** Whether this browser implements WebUSB at all (Chrome and Edge do). */
 export const supported = typeof navigator !== 'undefined' && 'usb' in navigator;

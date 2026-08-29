@@ -11,6 +11,7 @@ export interface ModeDef {
 	tags: string[];
 }
 
+/** Every USB mode the panel can switch to, in the order they are shown. */
 export const MODES: ModeDef[] = [
 	{ id: 0, name: 'Steam (puck)', summary: 'Emulates the official puck for Steam Input.', tags: ['default'] },
 	{

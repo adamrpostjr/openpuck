@@ -59,4 +59,5 @@ class PanelStore {
 	}
 }
 
+/** Open state and geometry of the floating panels, persisted per browser. */
 export const panels = new PanelStore();

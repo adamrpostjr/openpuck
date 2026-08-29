@@ -69,6 +69,9 @@ never commit it.
 
 ## Web panel
 
+**New to Svelte or Skeleton? Read `web/README.md` first** — it covers the runes,
+the headless components, the layering, and how to make the common changes.
+
 The WebUSB panel is a Svelte app in `web/`. It **builds into `docs/`**, so
 `docs/index.html`, `docs/sniffer.html` and `docs/assets/` are generated --
 never hand-edit them; change `web/src/` and rebuild.

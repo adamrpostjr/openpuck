@@ -19,6 +19,7 @@ export interface HangRow {
 	usbd: number | null;
 }
 
+/** Seconds as "1m 12s", for uptimes shown next to a reset. */
 export function fmtDuration(s: number): string {
 	const r = Math.round(s);
 	return r >= 60 ? `${Math.floor(r / 60)}m ${r % 60}s` : `${r}s`;
@@ -211,4 +212,5 @@ class DiagState {
 	}
 }
 
+/** Capture ring, flight recorder, hang log and the stability test. */
 export const diag = new DiagState();

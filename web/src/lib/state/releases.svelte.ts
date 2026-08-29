@@ -7,6 +7,7 @@
 
 import { uf2ToImage } from '$lib/protocol/firmware';
 
+/** Upstream repo the release list and firmware mirror come from. */
 export const REL_REPO = 'safijari/openpuck';
 const MIRROR = `https://raw.githubusercontent.com/${REL_REPO}/firmware`;
 
@@ -138,4 +139,5 @@ class ReleaseStore {
 	}
 }
 
+/** GitHub releases and the mirrored firmware images. */
 export const releases = new ReleaseStore();

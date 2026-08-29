@@ -42,4 +42,5 @@ class TrailStore {
 	}
 }
 
+/** Loop-state trail, persisted so an unattended hang survives a refresh. */
 export const trail = new TrailStore();

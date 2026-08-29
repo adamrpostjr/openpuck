@@ -18,6 +18,7 @@ export interface TypeDef {
 	labels: Record<number, string>;
 }
 
+/** Per-type remap targets. Order must match the firmware's ET_* enum. */
 export const TYPE_DEFS: TypeDef[] = [
 	{
 		key: 'XBOX',
@@ -105,6 +106,7 @@ export const TYPE_DEFS: TypeDef[] = [
 	},
 ];
 
+/** The four back paddles, in the order the firmware stores them. */
 export const BACK_LABELS = [
 	'L4 (back upper-left)',
 	'R4 (back upper-right)',
@@ -123,6 +125,7 @@ export const PAD_STICK_OPTS: [number, string][] = [
 	[2, 'Right stick'],
 ];
 
+/** Trackpad -> stick selects, indexed left then right. */
 export const PAD_STICK_LABELS = ['Left trackpad → stick', 'Right trackpad → stick'];
 
 /** Sorted remap targets for a type, with the leading "none"/"default" entry. */

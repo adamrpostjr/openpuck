@@ -131,4 +131,5 @@ class FwupState {
 	}
 }
 
+/** The firmware update runner and its blocking progress modal. */
 export const fwup = new FwupState();
