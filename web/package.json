@@ -7,6 +7,8 @@
 		"dev": "vite",
 		"build": "vite build",
 		"preview": "vite preview",
+		"theme": "node tools/gen-theme.mjs",
+		"theme:check": "node tools/gen-theme.mjs && git diff --exit-code -- src/openpuck-theme.css",
 		"check": "svelte-check --tsconfig ./tsconfig.json",
 		"test": "vitest run",
 		"format": "prettier --write .",

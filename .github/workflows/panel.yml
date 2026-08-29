@@ -38,6 +38,9 @@ jobs:
       - name: Format check
         run: npm run format:check
 
+      - name: Theme is in sync with its generator
+        run: npm run theme:check
+
       - name: Type check
         run: npm run check
 
