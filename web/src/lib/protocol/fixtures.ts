@@ -4,6 +4,8 @@
 // clocks, 1000 us/ms, last reset "reboot"). Used to develop the UI without
 // hardware attached and as the parseBlob test input.
 
+import { LZO, type LizardBinding } from './lizard';
+
 export interface BlobSpec {
 	protocol: number;
 	mode: number;
@@ -114,3 +116,15 @@ export function buildBlob(spec: BlobSpec = LIVE_V17): Uint8Array {
 
 	return p;
 }
+
+/** A few representative bindings, for developing the editor without hardware. */
+export const FIXTURE_LIZARD: LizardBinding[] = [
+	// Ctrl+C on A.
+	{ outType: LZO.KBD, od: [0x01, 0x06, 0, 0, 0, 0, 0], trig: 0x1, hold: 0 },
+	// Left click on the right pad click.
+	{ outType: LZO.MBTN, od: [1, 0, 0, 0, 0, 0, 0], trig: 0x400000, hold: 0 },
+	// Gyro aiming while the right pad is touched.
+	{ outType: LZO.AXIS, od: [2, 1, 0, 0, 0, 0, 0], trig: 0, hold: 0 },
+	// Volume up on D-pad Up.
+	{ outType: LZO.CONSUMER, od: [1, 0, 0, 0, 0, 0, 0], trig: 0x2000, hold: 0 },
+];

@@ -1,6 +1,13 @@
 import { parseBlob, STAGE_NAMES, type DeviceStatus } from '$lib/protocol/blob';
-import { buildBlob } from '$lib/protocol/fixtures';
+import { buildBlob, FIXTURE_LIZARD } from '$lib/protocol/fixtures';
 import { Transport, MARK_PAIRED } from '$lib/usb/transport';
+import {
+	decodeBindings,
+	encodeBinding,
+	filterSavable,
+	LZ_OP,
+	type LizardBinding,
+} from '$lib/protocol/lizard';
 import { logs } from '$lib/state/log.svelte';
 import { trail } from '$lib/state/trail.svelte';
 
@@ -52,6 +59,7 @@ class DeviceState {
 				this.hardWedge = null;
 				this.lastBlobTs = 0;
 				this.hbLostEpisode = false;
+				this.lizardLoaded = false;
 				void this.startPolling();
 			},
 			onGone: () => {
@@ -143,6 +151,12 @@ class DeviceState {
 			this.activeSlot = first >= 0 ? first : 0;
 		}
 		this.status = next;
+
+		// Lazy, capability-gated: only after a blob proves the puck speaks v16+.
+		if (!this.lizardLoaded && next.caps.lizard) {
+			this.lizardLoaded = true;
+			void this.loadLizard();
+		}
 	}
 
 	private async refresh() {
@@ -197,10 +211,85 @@ class DeviceState {
 		}
 	}
 
+	// ---- lizard map ----
+	lizard = $state<LizardBinding[]>([]);
+	lizardStatus = $state('');
+	/** One-shot per connection: the map is fetched lazily once v16+ is proven. */
+	private lizardLoaded = false;
+
+	/**
+	 * Every lizard op sends 0x11..0x15 then does a blocking read. Pre-v16
+	 * firmware drops the byte and never replies, so the read would hang the
+	 * shared endpoint forever and take the status poll with it. Never send one
+	 * until a status blob has proven the puck speaks v16.
+	 */
+	get lizardCapable() {
+		return !!this.status?.caps.lizard;
+	}
+
+	private async lizardExchange<T>(fn: () => Promise<T>): Promise<T | null> {
+		this.busy.lizard = true;
+		// Let an in-flight status poll finish first; a nested transferIn would
+		// steal its reply.
+		for (let i = 0; i < 25 && this.inflight; i++) await new Promise((r) => setTimeout(r, 20));
+		try {
+			return await fn();
+		} catch (e) {
+			logs.error(`lizard err: ${(e as Error).message}`);
+			return null;
+		} finally {
+			this.busy.lizard = false;
+		}
+	}
+
+	private async readLizard(): Promise<LizardBinding[] | null> {
+		const frame = await this.transport.readLizardFrame();
+		return frame ? decodeBindings(frame.acc, frame.count) : null;
+	}
+
+	async loadLizard() {
+		if (!this.lizardCapable) return;
+		await this.lizardExchange(async () => {
+			await this.transport.send([LZ_OP.dump]);
+			const b = await this.readLizard();
+			if (b) {
+				this.lizard = b;
+				logs.info(`lizard map loaded — ${b.length} bindings`);
+			}
+		});
+	}
+
+	async saveLizard() {
+		if (!this.transport.connected || !this.lizardCapable) return;
+		const valid = filterSavable($state.snapshot(this.lizard) as LizardBinding[]);
+		const dropped = this.lizard.length - valid.length;
+		await this.lizardExchange(async () => {
+			await this.transport.send([LZ_OP.beginEdit, valid.length & 0xff]);
+			for (let i = 0; i < valid.length; i++) await this.transport.send(encodeBinding(i, valid[i]));
+			await this.transport.send([LZ_OP.commit]);
+			const b = await this.readLizard();
+			if (b) this.lizard = b;
+			const skipped = dropped ? ` (skipped ${dropped} incomplete: no trigger/hold)` : '';
+			logs.ok(`lizard map saved — ${valid.length} bindings${skipped}`);
+		});
+	}
+
+	async resetLizard() {
+		if (!this.transport.connected || !this.lizardCapable) return;
+		await this.lizardExchange(async () => {
+			await this.transport.send([LZ_OP.reset]);
+			const b = await this.readLizard();
+			if (b) this.lizard = b;
+			logs.ok('lizard map reset to defaults');
+		});
+	}
+
 	/** Renders the shell against a recorded blob, for layout work without hardware. */
 	loadFixture() {
 		this.applyBlob(buildBlob());
 		this.conn = 'connected';
+		this.lizardLoaded = true; // no device to dump from
+		this.lizard = structuredClone(FIXTURE_LIZARD);
 	}
 }
 

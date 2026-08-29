@@ -238,4 +238,30 @@ export class Transport {
 	readBlob() {
 		return this.readFrame(MARK_STATUS, 12);
 	}
+
+	/**
+	 * Read a [0xAA][count][count*16] lizard frame, accumulating packets until
+	 * it is complete. Unlike readFrame this cannot use a single generous read:
+	 * a full 32-binding map is 514 bytes, well over one transfer.
+	 */
+	async readLizardFrame(): Promise<{ acc: Uint8Array; count: number } | null> {
+		if (!this.dev) return null;
+		let acc = new Uint8Array(0);
+		for (let guard = 0; guard < 64; guard++) {
+			const r = await this.dev.transferIn(this.epIn, 128);
+			if (r.status !== 'ok' || !r.data) break;
+			const d = new Uint8Array(r.data.buffer);
+			const m = new Uint8Array(acc.length + d.length);
+			m.set(acc);
+			m.set(d, acc.length);
+			acc = m;
+			let i = 0;
+			while (i < acc.length && acc[i] !== MARK_LIZARD) i++;
+			if (i > 0) acc = acc.slice(i);
+			if (acc.length < 2) continue;
+			const count = acc[1];
+			if (acc.length >= 2 + count * 16) return { acc, count };
+		}
+		return null;
+	}
 }
