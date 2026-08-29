@@ -53,7 +53,7 @@
 	</button>
 </div>
 <div class="space-y-4">
-	<div class="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
+	<div class="grid gap-2 autofit-[150px]">
 		<Stat label="P→C" value={sniffer.stats.pc} />
 		<Stat label="C→P" value={sniffer.stats.cp} />
 		<Stat label="Bad CRC" value={sniffer.stats.bad} tone={sniffer.stats.bad ? 'down' : 'none'} />
@@ -72,7 +72,7 @@
 	</div>
 
 	<Panel title="Session">
-		<div class="grid gap-3 text-sm [grid-template-columns:repeat(auto-fit,minmax(280px,1fr))]">
+		<div class="grid gap-3 text-sm autofit-[280px]">
 			<div>
 				<div class="text-app-faint text-[10px] font-semibold tracking-wider uppercase">Locked session</div>
 				<div class="font-mono text-xs">
@@ -148,7 +148,7 @@
 			</button>
 		</div>
 
-		<div class="mt-3 grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(260px,1fr))]">
+		<div class="mt-3 grid gap-2 autofit-[260px]">
 			<label class="flex items-center gap-2 text-xs">
 				<span class="text-app-muted w-24 shrink-0">Lock ibex</span>
 				<input
@@ -208,7 +208,7 @@
 
 	<Panel title="Frames">
 		{#snippet actions()}
-			<span class="text-app-muted text-xs tabnum">showing {sniffer.stats.shown}</span>
+			<span class="text-app-muted text-xs tabular-nums">showing {sniffer.stats.shown}</span>
 		{/snippet}
 
 		<div class="mb-3 flex flex-wrap items-center gap-3 text-xs">
@@ -253,15 +253,15 @@
 				<tbody>
 					{#each sniffer.rows as e (e.seq)}
 						<tr class="border-app-line-soft border-b" class:opacity-60={!e.crc}>
-							<td class="py-0.5 pr-2 tabnum">{e.seq}</td>
-							<td class="py-0.5 pr-2 tabnum">{e.ms.toFixed(1)}</td>
+							<td class="py-0.5 pr-2 tabular-nums">{e.seq}</td>
+							<td class="py-0.5 pr-2 tabular-nums">{e.ms.toFixed(1)}</td>
 							<td class="py-0.5 pr-2 {e.dir === 'P→C' ? 'text-primary-700-300' : 'text-secondary-700-300'}">{e.dir}</td>
-							<td class="py-0.5 pr-2 tabnum">{e.ch}</td>
-							<td class="py-0.5 pr-2 tabnum">{e.pipe}</td>
+							<td class="py-0.5 pr-2 tabular-nums">{e.ch}</td>
+							<td class="py-0.5 pr-2 tabular-nums">{e.pipe}</td>
 							<td class="py-0.5 pr-2">{e.op}</td>
 							<td class="py-0.5 pr-2" class:text-error-700-300={!e.crc}>{e.crc ? 'ok' : 'BAD'}</td>
-							<td class="py-0.5 pr-2 tabnum">{e.rssi}</td>
-							<td class="py-0.5 pr-2 tabnum">{e.len}</td>
+							<td class="py-0.5 pr-2 tabular-nums">{e.rssi}</td>
+							<td class="py-0.5 pr-2 tabular-nums">{e.len}</td>
 							<td class="text-app-muted py-0.5 break-all">{e.raw}</td>
 						</tr>
 					{/each}

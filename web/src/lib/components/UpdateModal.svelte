@@ -41,7 +41,7 @@
 					/>
 				</Progress.Track>
 				{#if m.pct !== null && !m.failed}
-					<Progress.ValueText class="text-app-muted tabnum text-xs" />
+					<Progress.ValueText class="text-app-muted tabular-nums text-xs" />
 				{/if}
 			</Progress>
 			{#if m.detail}

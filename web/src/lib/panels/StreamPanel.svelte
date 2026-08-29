@@ -42,7 +42,7 @@
 							<GripVerticalIcon size={13} class="text-app-faint" />
 							{title}
 						</FloatingPanel.Title>
-						{#if badge}<span class="text-app-faint tabnum text-[11px]">{badge}</span>{/if}
+						{#if badge}<span class="text-app-faint tabular-nums text-[11px]">{badge}</span>{/if}
 						<FloatingPanel.Control class="ml-auto flex items-center gap-1">
 							<FloatingPanel.StageTrigger
 								stage="minimized"

@@ -35,7 +35,7 @@
 
 		<!-- 11 naked buttons became cards: the selected one is obvious, and each
 		     mode carries its own description instead of two shared paragraphs. -->
-		<div class="grid gap-2.5 [grid-template-columns:repeat(auto-fill,minmax(230px,1fr))]">
+		<div class="grid gap-2.5 autofill-[230px]">
 			{#each MODES as m (m.id)}
 				{@const active = status?.mode === m.id}
 				<button

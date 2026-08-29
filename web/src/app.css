@@ -28,12 +28,13 @@
 	--color-app-strong: light-dark(var(--color-surface-950), var(--color-surface-50));
 }
 
-html,
-body {
-	height: 100%;
+/* A named utility for the responsive card grids, so the same
+   repeat(auto-fit, minmax(N, 1fr)) is not spelled out as an arbitrary property
+   at every call site. */
+@utility autofit-* {
+	grid-template-columns: repeat(auto-fit, minmax(--value([*]), 1fr));
 }
 
-/* Stops repolled numbers jittering as their digits change every 600ms. */
-.tabnum {
-	font-variant-numeric: tabular-nums;
+@utility autofill-* {
+	grid-template-columns: repeat(auto-fill, minmax(--value([*]), 1fr));
 }

@@ -70,7 +70,7 @@
 	{:else}
 		<!-- Full width lets these lay out side by side instead of stacking as
 		     rows in a 980px column. -->
-		<div class="grid gap-x-8 gap-y-3 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
+		<div class="grid gap-x-8 gap-y-3 autofit-[320px]">
 			<div class="space-y-3">
 				<div class="text-app-muted text-[11px] font-semibold tracking-wider uppercase">Back paddles</div>
 				{#each BACK_LABELS as label, i (label)}
@@ -120,7 +120,7 @@
 						value={cfg.led}
 						onchange={(e) => set(TYPE_OFF.led, +e.currentTarget.value)}
 					/>
-					<span class="text-secondary-700-300 tabnum w-12 shrink-0 text-right text-sm">{ledLabel(cfg.led)}</span>
+					<span class="text-secondary-700-300 tabular-nums w-12 shrink-0 text-right text-sm">{ledLabel(cfg.led)}</span>
 				</label>
 
 				<div class="flex items-center gap-2 pt-1">

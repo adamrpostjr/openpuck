@@ -117,7 +117,7 @@
 				<SaveIcon size={14} /> Save to device
 			</button>
 			<button type="button" class="btn preset-tonal-surface btn-sm" onclick={() => device.loadLizard()}>Reload</button>
-			<span class="text-app-muted ml-auto text-xs tabnum">{bindings.length} / {LZ_MAX}</span>
+			<span class="text-app-muted ml-auto text-xs tabular-nums">{bindings.length} / {LZ_MAX}</span>
 			{#if confirmReset}
 				<span class="text-app-muted text-xs">Reset to defaults? Unsaved edits are lost.</span>
 				<button
@@ -208,7 +208,7 @@
 					     can't reflow into a different shape per output type. -->
 					{#if open}
 						<div class="border-app-line-soft space-y-3 border-t px-3 py-3">
-							<div class="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
+							<div class="grid gap-3 autofit-[200px]">
 								{#if !isAnalog(b)}
 									<div>
 										{@render field('When')}

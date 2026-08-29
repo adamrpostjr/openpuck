@@ -20,7 +20,7 @@
 <div class="bg-app-well border-app-line-soft rounded-base border p-2.5" title={hint}>
 	<div class="text-app-muted text-[11px] font-medium tracking-wider uppercase">{label}</div>
 	{#if tone === 'none'}
-		<div class="tabnum mt-0.5 text-lg {mono ? 'font-mono text-sm' : ''}">{shown}</div>
+		<div class="tabular-nums mt-0.5 text-lg {mono ? 'font-mono text-sm' : ''}">{shown}</div>
 	{:else}
 		<div class="mt-1">
 			<span class="rounded-full px-2 py-0.5 text-xs font-semibold {pill[tone]}">{shown}</span>

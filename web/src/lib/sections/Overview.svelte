@@ -45,7 +45,7 @@
 	<div class="mb-4"><PairedPucks /></div>
 {/if}
 
-<div class="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(340px,1fr))]">
+<div class="grid gap-4 autofit-[340px]">
 	{#if !device.isDongle}
 		<Panel title="Version">
 			{#snippet info()}

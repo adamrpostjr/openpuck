@@ -31,7 +31,7 @@
 	{:else}
 		{#each trail.entries as e (e.t + e.msg)}
 			<div class="flex gap-2">
-				<span class="text-app-faint tabnum shrink-0">{new Date(e.t).toLocaleString()}</span>
+				<span class="text-app-faint tabular-nums shrink-0">{new Date(e.t).toLocaleString()}</span>
 				<span class="break-all whitespace-pre-wrap">{e.msg}</span>
 			</div>
 		{/each}

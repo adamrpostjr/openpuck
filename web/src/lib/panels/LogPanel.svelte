@@ -47,7 +47,7 @@
 							<GripVerticalIcon size={13} class="text-app-faint" />
 							Logs
 						</FloatingPanel.Title>
-						<span class="text-app-faint tabnum text-[11px]">{logs.entries.length}</span>
+						<span class="text-app-faint tabular-nums text-[11px]">{logs.entries.length}</span>
 						<FloatingPanel.Control class="ml-auto flex items-center gap-1">
 							<FloatingPanel.StageTrigger
 								stage="minimized"
@@ -108,7 +108,7 @@
 					{:else}
 						{#each logs.visible as e (e.id)}
 							<div class="flex gap-2">
-								<span class="text-app-faint tabnum shrink-0">{e.at.toLocaleTimeString()}</span>
+								<span class="text-app-faint tabular-nums shrink-0">{e.at.toLocaleTimeString()}</span>
 								<span class="{LEVEL_CLASS[e.level]} break-all whitespace-pre-wrap">{e.message}</span>
 							</div>
 						{/each}

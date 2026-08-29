@@ -42,7 +42,7 @@
 				while Delivered reads "—" means the puck is still polling but getting no usable replies.
 			</InfoPopover>
 		{/snippet}
-		<div class="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
+		<div class="grid gap-2 autofit-[150px]">
 			<Stat label="Delivered (all)" value={status?.link.up ? `${status.rates.delivered} /s` : null} />
 			<Stat label="New reports (all)" value={status?.link.up ? `${status.rates.newReports} /s` : null} />
 			<Stat label="Polls/s (all)" value={status ? `${status.rates.polls} /s` : null} />
@@ -90,7 +90,7 @@
 			</InfoPopover>
 		{/snippet}
 		{#if status?.reset}
-			<div class="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
+			<div class="grid gap-2 autofit-[150px]">
 				<Stat label="Last reset" value={status.reset.name} tone={status.reset.isFault ? 'down' : 'none'} />
 				<Stat label="Hung in" value={status.reset.hangStageName} />
 				<Stat label="Hang PC" value={status.reset.hangPC ? hex(status.reset.hangPC) : null} mono />

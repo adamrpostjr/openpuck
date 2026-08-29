@@ -25,7 +25,7 @@
 	}
 </script>
 
-<div class="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(380px,1fr))]">
+<div class="grid gap-4 autofit-[380px]">
 	<Panel title="Trackpad mouse" class={mouseActive ? '' : 'opacity-60'}>
 		{#snippet info()}
 			<InfoPopover title="Trackpad mouse (lizard + Xbox)">
@@ -43,7 +43,7 @@
 		<label class="mb-3 block">
 			<div class="mb-1 flex items-center justify-between text-sm">
 				<span>Sensitivity</span>
-				<span class="text-secondary-700-300 tabnum">{status?.mouse.div ?? '—'}</span>
+				<span class="text-secondary-700-300 tabular-nums">{status?.mouse.div ?? '—'}</span>
 			</div>
 			<input
 				type="range"
@@ -60,7 +60,7 @@
 		<label class="block">
 			<div class="mb-1 flex items-center justify-between text-sm">
 				<span>Glide / friction</span>
-				<span class="text-secondary-700-300 tabnum">{status?.mouse.friction ?? '—'}</span>
+				<span class="text-secondary-700-300 tabular-nums">{status?.mouse.friction ?? '—'}</span>
 			</div>
 			<input
 				type="range"
