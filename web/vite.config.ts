@@ -8,12 +8,12 @@ export default defineConfig({
 	plugins: [tailwindcss(), svelte()],
 	resolve: { alias: { $lib: resolve(import.meta.dirname, 'src/lib') } },
 	build: {
-		// Builds to web/dist until the port is functional. At cutover this
-		// becomes '../docs', which Pages serves straight from the branch; that
-		// directory also holds hand-authored markdown (PROTOCOL.md et al) and
-		// .nojekyll, so emptyOutDir must stay false there.
-		outDir: 'dist',
-		emptyOutDir: true,
+		// Pages serves docs/ straight from the branch, and that directory also
+		// holds hand-authored markdown (PROTOCOL.md, BUILD_AND_DEPLOY.md,
+		// WEBUSB_LINUX.md, TESTING_GUIDE.md) plus .nojekyll -- emptyOutDir
+		// would delete them.
+		outDir: '../docs',
+		emptyOutDir: false,
 		rollupOptions: {
 			input: {
 				index: resolve(import.meta.dirname, 'index.html'),
