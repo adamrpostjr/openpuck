@@ -42,7 +42,11 @@ export default defineConfig({
 				// talk to a puck with no network at all. Only the GitHub release
 				// list needs one, and that failing is already handled.
 				navigateFallback: './index.html',
-				navigateFallbackDenylist: [/\.md$/],
+				// The fallback would otherwise serve the app for any navigation
+				// under the scope, which makes legacy.html unreachable the moment
+				// the worker installs -- and the whole point of keeping it is
+				// being able to open it side by side against the same puck.
+				navigateFallbackDenylist: [/\.md$/, /legacy(-sniffer)?\.html$/],
 				cleanupOutdatedCaches: true,
 			},
 			devOptions: { enabled: false },
